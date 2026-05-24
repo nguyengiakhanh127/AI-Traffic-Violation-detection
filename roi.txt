@@ -1,0 +1,63 @@
+{
+    "giao_thong_noi_do_tq":
+        raw:
+            {
+                Làn phải trong cùng: [(851, 673), (1134, 673), (836, 349), (695, 353)],
+                Làn giữa: [(68, 673), (847, 673), (694, 352), (293, 363)],
+                Làn trái trong cùng: [(0, 505), (66, 673), (289, 364), (153, 363)],
+
+                Polygon đèn hiệu giao thông: [(473, 35), (483, 35), (484, 60), (473, 61)],
+                Polygon làn đường cho người đi bộ: [(159, 359), (845, 341), (807, 300), (213, 310)],
+                Polygon "DEMO" vùng cấm đỗ xe: [(0, 503), (0, 673), (61, 673), (290, 362), (152, 364)]
+            },
+        code_block:
+            Khởi tạo làn đường 
+            {
+                """
+                    lane_1= [
+                        Edge(Vertex(851, 673), Vertex(1134, 673), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(1134, 673), Vertex(836, 349), TrafficLineType.DASHED),
+                        Edge(Vertex(836, 349), Vertex(695, 353), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(695, 353), Vertex(851, 673), TrafficLineType.SOLID)
+                    ]
+                    trafficLane_1 = TrafficLane("1", lane_1, TrafficLaneRule({TrafficVehicleType.CAR, TrafficVehicleType.TRUCK, TrafficVehicleType.MOTORCYCLE}))
+                    lane_2= [
+                        Edge(Vertex(68, 673), Vertex(847, 673), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(847, 673), Vertex(694, 352), TrafficLineType.SOLID),
+                        Edge(Vertex(694, 352), Vertex(293, 363), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(293, 363), Vertex(68, 673), TrafficLineType.SOLID)
+                    ]
+                    trafficLane_2 = TrafficLane("2", lane_2, TrafficLaneRule({TrafficVehicleType.CAR, TrafficVehicleType.TRUCK, TrafficVehicleType.MOTORCYCLE}))
+                    lane_3= [
+                        Edge(Vertex(0, 505), Vertex(66, 673), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(66, 673), Vertex(289, 364), TrafficLineType.SOLID),
+                        Edge(Vertex(289, 364), Vertex(153, 363), TrafficLineType.VIRTUAL),
+                        Edge(Vertex(153, 363), Vertex(0, 505), TrafficLineType.DASHED)
+                    ]
+                    trafficLane_3 = TrafficLane("3", lane_3, TrafficLaneRule({TrafficVehicleType.CAR, TrafficVehicleType.TRUCK, TrafficVehicleType.MOTORCYCLE}))
+                """
+            }
+    "giao_thong_noi_do_hn":
+        raw"
+            {
+
+            }
+        code_block:
+            """
+            lane_1 = [
+                Edge(Vertex(612, 1199), Vertex(1418, 1198), TrafficLineType.VIRTUAL),
+                Edge(Vertex(1418, 1198), Vertex(1256, 804), TrafficLineType.DASHED),
+                Edge(Vertex(1256, 804), Vertex(734, 813), TrafficLineType.VIRTUAL),
+                Edge(Vertex(734, 813), Vertex(612, 1199), TrafficLineType.SOLID)
+            ]
+            trafficLane_1 = TrafficLane("1", lane_1, TrafficLaneRule({TrafficVehicleType.CAR, TrafficVehicleType.TRUCK, TrafficVehicleType.MOTORCYCLE}))
+
+            lane_2 = [
+                Edge(Vertex(0, 838), Vertex(730, 814), TrafficLineType.VIRTUAL),
+                Edge(Vertex(730, 814), Vertex(611, 1199), TrafficLineType.SOLID),
+                Edge(Vertex(611, 1199), Vertex(0, 1199), TrafficLineType.VIRTUAL),
+                Edge(Vertex(0, 1199), Vertex(0, 838), TrafficLineType.DASHED)
+            ]
+            trafficLane_2 = TrafficLane("2", lane_2, TrafficLaneRule({TrafficVehicleType.CAR, TrafficVehicleType.TRUCK, TrafficVehicleType.MOTORCYCLE}))
+            """
+}
