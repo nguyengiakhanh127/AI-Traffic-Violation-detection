@@ -13,19 +13,20 @@ class TrafficVehicleType(Enum):
 class TrafficLineType(Enum):
     SOLID = "Solid"     
     DASHED = "Dashed"   
-    VIRTUAL = "Virtual"
+    ENTRY = "Entry"     
+    EXIT = "Exit"      
 
 class ViolationType(Enum):
-    WRONG_LANE = auto()                 # Đi sai làn đường
-    LINE_CROSSING = auto()              # Đè vạch phân làn
-    WRONG_WAY = auto()                  # Đi ngược chiều
-    FORBIDDEN_ENTRY = auto()            # Đi vào đường cấm
-    ILLEGAL_PARKING = auto()            # Dừng đỗ xe trái quy định
-    PEDESTRIAN_CROSSING_STOP = auto()   # Dừng xe đè vạch người đi bộ
+    WRONG_LANE = auto()                
+    LINE_CROSSING = auto()          
+    WRONG_WAY = auto()                
+    FORBIDDEN_ENTRY = auto()            
+    ILLEGAL_PARKING = auto()           
+    PEDESTRIAN_CROSSING_STOP = auto()  
+    RED_LINE = auto()
 
 class TrafficZoneType(Enum):
-    PEDESTRIAN_CROSSING = auto()        # Vạch kẻ đi bộ
-    NO_PARKING = auto()                 # Vùng cấm đỗ xe
-    FORBIDDEN_AREA = auto()             # Vùng cấm đi vào
+    PEDESTRIAN_CROSSING = auto()     
+    NO_PARKING = auto()               
+    FORBIDDEN_AREA = auto()         
 
-# --- END OF FILE enums.py ---

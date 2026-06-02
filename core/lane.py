@@ -8,6 +8,7 @@ from core.vehicle import  Vehicle
 from typing import List, Optional, Tuple
 from geometry.spatial_math import SpatialMath
 from utils.enums import TrafficLineType
+import math
 
 class TrafficLane:
     def __init__(
@@ -20,6 +21,25 @@ class TrafficLane:
         self.edges = edges
         self.lane_rule = lane_rule
         
+        # Điểm xuất phát và Vector hướng được tính toán tự động bằng thuật toán mới
+        self.entry_point = self._setup_entry_point()
+        self.lane_direction = self._setup_lane_direction()
+        
+        self.polygon = Polygon([edge.p1 for edge in self.edges])
+        self.solid_edges: List[Edge] = [e for e in self.edges if e.line_type == TrafficLineType.SOLID]
+
+class TrafficLane:
+    def __init__(
+        self,
+        lane_id: str,
+        edges: List[Edge],
+        lane_rule: TrafficLaneRule
+    ):
+        self.lane_id = lane_id
+        self.edges = edges
+        self.lane_rule = lane_rule
+        
+        # Thiết lập điểm vào và hướng bằng thuật toán Midpoint (Nguyên bản)
         self.entry_point = self._setup_entry_point()
         self.lane_direction = self._setup_lane_direction()
         
@@ -28,28 +48,54 @@ class TrafficLane:
         self.solid_edges: List[Edge] = [e for e in self.edges if e.line_type == TrafficLineType.SOLID]
 
     def _setup_entry_point(self) -> Vertex:
-        virtual_edges = [e for e in self.edges if e.line_type == TrafficLineType.VIRTUAL]
-        if virtual_edges:
-            return SpatialMath.get_midpoint(virtual_edges[0])
+        """
+        [Khôi phục]: Tìm điểm xuất phát bằng trung điểm (Midpoint) của cạnh ENTRY.
+        Giả định người dùng vẽ 1 cạnh ENTRY duy nhất cắt ngang lối vào.
+        """
+        entry_edges = [e for e in self.edges if e.line_type == TrafficLineType.ENTRY]
+        if entry_edges:
+            return SpatialMath.get_midpoint(entry_edges[0])
         
-        return self.edges[0].p1 
+        return self.edges[0].p1 # Fallback an toàn
     
     def _setup_lane_direction(self) -> Vector2D:
-        virtual_edges = [e for e in self.edges if e.line_type == TrafficLineType.VIRTUAL]
-        if len(virtual_edges) >= 2:
-            entry_mid = SpatialMath.get_midpoint(virtual_edges[0])
-            exit_mid  = SpatialMath.get_midpoint(virtual_edges[1])
+        """
+        [Khôi phục]: Xác định hướng làn đường bằng cách nối trung điểm (Midpoint) 
+        của cạnh ENTRY đến trung điểm của cạnh EXIT.
+        Giả định làn đường là một tứ giác (Quadrilateral) có 2 vạch ngang tiêu chuẩn.
+        """
+        entry_edges = [e for e in self.edges if e.line_type == TrafficLineType.ENTRY]
+        exit_edges = [e for e in self.edges if e.line_type == TrafficLineType.EXIT]
+        
+        if entry_edges and exit_edges:
+            entry_mid = SpatialMath.get_midpoint(entry_edges[0])
+            exit_mid = SpatialMath.get_midpoint(exit_edges[0])
+            
+            # Trả về Vector chuẩn hóa nối từ điểm Vào đến điểm Ra
             return SpatialMath.get_normalized_vector(entry_mid, exit_mid)
             
-        return Vector2D(0.0, -1.0) 
+        return Vector2D(0.0, -1.0) # Fallback hướng lên trên
+
 
     def get_line_crossed(self, vehicle_pos: Vertex, epsilon_pixels: float = 2.0) -> Optional[Edge]:
+        px, py = vehicle_pos.x, vehicle_pos.y
+        
         for edge in self.edges:
-            if edge.norm == 0:
+            x1, y1 = edge.p1.x, edge.p1.y
+            x2, y2 = edge.p2.x, edge.p2.y
+            
+            dx, dy = x2 - x1, y2 - y1
+            if dx == 0 and dy == 0:
                 continue
                 
-            numerator = abs(SpatialMath.get_relative_position(vehicle_pos, edge))
-            distance = numerator / edge.norm
+            l2 = dx*dx + dy*dy
+            
+            t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / l2))
+
+            proj_x = x1 + t * dx
+            proj_y = y1 + t * dy
+            
+            distance = math.hypot(px - proj_x, py - proj_y)
             
             if distance <= epsilon_pixels:
                 return edge

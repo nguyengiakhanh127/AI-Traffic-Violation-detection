@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import math
 from typing import List
 from geometry.primitives import Vertex
 from utils.enums import TrafficLineType
@@ -23,14 +24,19 @@ class Edge:
         
         self.weights = np.array([a, b], dtype=np.float32)
         self.bias = c
-        self.norm = float(np.linalg.norm(self.weights))
+       #self.norm = float(np.linalg.norm(self.weights))
+        self.norm = max(float(math.hypot(a, b)), 1e-6)
 
 class Polygon:
     def __init__(self, vertices: List[Vertex]):
         self.vertices = vertices
-        self._cv_contour = np.array([v.as_array for v in self.vertices], dtype=np.int32)
+       #self._cv_contour = np.array([v.as_array for v in self.vertices], dtype=np.int32)
+        self._cv_contour = np.array([v.as_tuple for v in self.vertices], dtype=np.float32)
 
     def is_contain_point(self, point: Vertex) -> bool:
+        """
         pt = (int(point.x), int(point.y))
         result = cv2.pointPolygonTest(self._cv_contour, pt, False)
+        """
+        result = cv2.pointPolygonTest(self._cv_contour, point.as_tuple, False)
         return result >= 0

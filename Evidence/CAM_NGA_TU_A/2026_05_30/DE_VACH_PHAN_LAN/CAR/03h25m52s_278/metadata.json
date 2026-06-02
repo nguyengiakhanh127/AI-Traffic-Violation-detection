@@ -1,0 +1,11 @@
+{
+    "camera_name": "CAM_NGA_TU_A",
+    "vehicle_id": 18,
+    "vehicle_type": "CAR",
+    "license_plate": "TODO",
+    "violation_time": "30/05/2026/03:25",
+    "violation_error": {
+        "code": "DE_VACH_PHAN_LAN",
+        "description": "Không chấp hành hiệu lệnh, chỉ dẫn của vạch kẻ đường"
+    }
+}

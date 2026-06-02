@@ -1,0 +1,82 @@
+/* --- START OF FILE app_style.qss --- */
+
+/* Màu nền tổng thể */
+QWidget {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+}
+
+/* Thanh tiêu đề tự tạo */
+#TitleBar {
+    background-color: #252526;
+    border-bottom: 1px solid #333333;
+}
+
+#AppLogo {
+    font-weight: bold;
+    font-size: 14px;
+    color: #007acc;
+    padding-left: 10px;
+}
+
+#TitleBar QPushButton {
+    background-color: transparent;
+    border: none;
+    padding: 8px 12px;
+}
+
+#TitleBar QPushButton:hover {
+    background-color: #3e3e42;
+}
+
+#BtnClose:hover {
+    background-color: #e81123 !important;
+    color: white;
+}
+
+/* Khu vực Sidebar (Tab bên trái) */
+#SideBar {
+    background-color: #333333;
+    border-right: 1px solid #1e1e1e;
+    /* Đảm bảo sidebar không bị tràn nội dung khi thu nhỏ */
+    overflow: hidden; 
+}
+
+#SideBar QPushButton {
+    background-color: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    
+    /* [CẬP NHẬT CSS]: Căn chỉnh icon và text */
+    text-align: left;
+    padding: 12px 15px; /* Lề trái 15px để khớp với width 55px của icon */
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+#SideBar QPushButton:hover {
+    background-color: #3f3f46;
+}
+
+#SideBar QPushButton:checked {
+    background-color: #3f3f46;
+    border-left: 3px solid #007acc;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+/* Khu vực các Panel con */
+#CanvasArea {
+    background-color: #121212; /* Màu tối hơn để làm nổi ảnh */
+    border: 1px solid #333333;
+}
+
+#RightPanel, #BottomPanel {
+    background-color: #252526;
+    border: 1px solid #333333;
+    border-radius: 4px;
+}
+
+/* --- END OF FILE app_style.qss --- */

@@ -1,0 +1,11 @@
+{
+    "camera_name": "CAM_NGA_TU_A",
+    "vehicle_id": 18,
+    "vehicle_type": "CAR",
+    "license_plate": "TODO",
+    "violation_time": "30/05/2026/03:25",
+    "violation_error": {
+        "code": "DI_NGUOC_CHIEU",
+        "description": "Đi ngược chiều của đường một chiều hoặc đường có biển cấm"
+    }
+}
