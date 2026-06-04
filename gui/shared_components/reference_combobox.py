@@ -63,26 +63,37 @@ class ReferenceComboBox(QComboBox):
             self.reference_cleared.emit()
 
     def update_registry(self, registry_data: dict):
-        """[CẬP NHẬT]: Tự động hiển thị Trống nếu không có dữ liệu"""
+        """Cập nhật danh sách thả xuống nhưng TUYỆT ĐỐI GIỮ NGUYÊN lựa chọn cũ"""
+        # Ghi nhớ lại ID đang được chọn
         current_text = self.currentText() 
+        
+        # Tạm thời khóa sự kiện để lúc clear/addItems không bắn tín hiệu thay đổi lung tung
+        self.blockSignals(True)
         self.clear()
         
         keys_list = registry_data.get(self.target_type, [])
         
-        # Nếu tủ dữ liệu trống -> Hiển thị "Trống" và Khóa ComboBox
         if not keys_list and not self.allow_manual:
             self.addItem("Trống")
             self.setEnabled(False)
-            return
+        else:
+            self.setEnabled(True)
+            if self.allow_manual:
+                self.addItem("✏ Tạo thủ công (Draw New)")
             
-        self.setEnabled(True)
-        if self.allow_manual:
-            self.addItem("✏ Tạo thủ công (Draw New)")
+            # Đổ dữ liệu mới vào
+            self.addItems(keys_list)
             
-        self.addItems(keys_list)
-        
-        idx = self.findText(current_text)
-        if idx >= 0:
-            self.setCurrentIndex(idx)
+            # [SỬA CHỮA QUAN TRỌNG]: Phục hồi lại cái ID cũ.
+            # Nếu ID cũ không còn tồn tại (bị xóa), trả về "Trống"
+            idx = self.findText(current_text)
+            if idx >= 0:
+                self.setCurrentIndex(idx)
+            else:
+                self.insertItem(0, "Trống")
+                self.setCurrentIndex(0)
+                
+        # Mở khóa sự kiện
+        self.blockSignals(False)
 
 # --- END UPDATE ---

@@ -13,7 +13,8 @@ class EventBroker(QObject):
     request_edge_count = pyqtSignal(object, str)
     request_highlight_sub_edge = pyqtSignal(str, int)
     clear_highlight_sub_edge = pyqtSignal(str, int)
-
+    request_delete_entity = pyqtSignal(str)
+    
     # 3. Các tín hiệu dữ liệu Config
     rule_updated = pyqtSignal(object, str, str, set)
     

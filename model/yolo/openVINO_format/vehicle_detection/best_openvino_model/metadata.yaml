@@ -1,0 +1,31 @@
+description: Ultralytics YOLO26n model trained on /kaggle/working/data.yaml
+author: Ultralytics
+date: '2026-06-04T09:39:26.460785'
+version: 8.4.46
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: bus
+  1: container
+  2: fireTruck
+  3: bicycle
+  4: car
+  5: motorcycle
+  6: truck
+  7: van
+args:
+  data: null
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: false
+  dynamic: false
+  nms: false
+channels: 3
+end2end: true

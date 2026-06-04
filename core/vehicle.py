@@ -1,92 +1,76 @@
+import cv2
+import math
+import numpy as np
 from typing import Optional, Deque, Dict, List, Tuple
 from collections import deque
-import numpy as np
+from dataclasses import dataclass
+
 from utils.enums import TrafficVehicleType
 from geometry.primitives import Vertex, Vector2D
-from geometry.shapes import Edge
-import math
-class VehicleCoordinate:
-    def __init__(
-        self, 
-        initial_centroid: Vertex,
-        initial_routing_point: Vertex,      
-        initial_footprint_left: Vertex,
-        initial_footprint_right: Vertex,
-        window_size: int = 5,
-       
-    ):
-        self.current_position: Vertex = initial_centroid
-        self.previous_position: Optional[Vertex] = None
 
-        self.direction: Vector2D = Vector2D(0.0, 0.0) 
+
+# ==========================================
+# 1. MODELS (Lưu trữ trạng thái phương tiện)
+# ==========================================
+
+@dataclass
+class VehicleAnchors:
+    """Đóng gói toàn bộ tọa độ không gian của xe trong một khung hình"""
+    centroid: Vertex
+    routing_point: Vertex
+    # Dùng Optional vì xe 2 bánh không có vệt bánh xe trái/phải
+    left_wheel: Optional[Vertex] = None
+    right_wheel: Optional[Vertex] = None
+
+
+class VehicleCoordinate:
+    """Quản lý động học và lịch sử di chuyển của xe"""
+    def __init__(self, initial_anchors: VehicleAnchors, window_size: int = 5, max_trajectory: int = 90):
+        self.current_anchors: VehicleAnchors = initial_anchors
+        self.previous_anchors: Optional[VehicleAnchors] = None
+
+        # 1 Queue duy nhất cho cả tính toán động học và vẽ UI (Trail)
+        self.trajectory: Deque[Vertex] = deque(maxlen=max_trajectory)
+        self.trajectory.append(initial_anchors.routing_point)
         
         self.window_size = window_size
-        self.position_history: Deque[Vertex] = deque(maxlen=self.window_size)
-        self.position_history.append(initial_centroid)
-
-        self.routing_point: Vertex = initial_routing_point
-        self.previous_routing_point: Optional[Vertex] = None
-
-        self.footprint_left: Vertex = initial_footprint_left
-        self.previous_footprint_left: Optional[Vertex] = None
-
-        self.footprint_right: Vertex = initial_footprint_right
-        self.previous_footprint_right: Optional[Vertex] = None
-
+        self.direction: Vector2D = Vector2D(0.0, 0.0) 
         self.stationary_frames: int = 0
-
-        self.full_trajectory: List[Vertex] = []
         self.age: int = 1 
 
-    def update_position(
-        self, 
-        new_centroid: Vertex, 
-        new_routing_point: Vertex, 
-        new_footprint_left: Vertex,
-        new_footprint_right: Vertex
-    ) -> None:
-        self.previous_position = self.current_position
-        self.current_position = new_centroid
-        self.position_history.append(new_centroid)
-
-        self.previous_routing_point = self.routing_point
-        self.routing_point = new_routing_point
-
-        self.previous_footprint_left = self.footprint_left
-        self.footprint_left = new_footprint_left
-
-        self.previous_footprint_right = self.footprint_right
-        self.footprint_right = new_footprint_right
-
+    def update(self, new_anchors: VehicleAnchors) -> None:
+        self.previous_anchors = self.current_anchors
+        self.current_anchors = new_anchors
         self.age += 1
 
-        if self.age % 2 == 0:
-            self.full_trajectory.append(self.current_position)
+        self.trajectory.append(new_anchors.routing_point)
+        self._update_kinematics()
+
+    def _update_kinematics(self) -> None:
+        history_len = len(self.trajectory)
+        if history_len >= 2:
+            compare_idx = max(0, history_len - self.window_size)
+            past_point = self.trajectory[compare_idx]
+            current_point = self.trajectory[-1]
+
+            frames_passed = max(1, history_len - compare_idx - 1)
+            self.direction = Vector2D(
+                (current_point.x - past_point.x) / frames_passed, 
+                (current_point.y - past_point.y) / frames_passed
+            )
+        else:
+            self.direction = Vector2D(0.0, 0.0)
 
         if not self.is_moving(movement_threshold=1.0):
             self.stationary_frames += 1
         else:
             self.stationary_frames = max(0, self.stationary_frames - 2)
 
-        if len(self.position_history) > 1:
-            oldest_pos = self.position_history[0]
-            dx = self.current_position.x - oldest_pos.x
-            dy = self.current_position.y - oldest_pos.y
-            frames_passed = len(self.position_history) - 1
-            self.direction = Vector2D(dx / frames_passed, dy / frames_passed)
-        else:
-            self.direction = Vector2D(0.0, 0.0)
-
     def is_moving(self, movement_threshold: float = 1.0) -> bool:
-        if len(self.position_history) < self.window_size:
+        if len(self.trajectory) < self.window_size:
             return False
+        return math.hypot(self.direction.dx, self.direction.dy) > movement_threshold
 
-        avg_speed = math.hypot(self.direction.dx, self.direction.dy)
-        return avg_speed > movement_threshold
-    
-    @property
-    def is_history_full(self) -> bool:
-        return len(self.position_history) >= self.position_history.maxlen
 
 class VehicleViolationState:
     def __init__(self):
@@ -103,86 +87,111 @@ class VehicleViolationState:
 
 
 class Vehicle:
-    def __init__(
-        self, 
-        track_id: int, 
-        vehicle_type: TrafficVehicleType, 
-        initial_centroid: Vertex,
-        initial_routing_point: Vertex,
-        initial_footprint_left: Vertex,
-        initial_footprint_right: Vertex,
-        window_size: int = 5
-    ):
+    """Thực thể Phương tiện (Tối ưu RAM bằng In-Memory Compression)"""
+    def __init__(self, track_id: int, vehicle_type: TrafficVehicleType, anchors: VehicleAnchors, window_size: int = 5):
         self.id: int = track_id
         self.vehicle_type: TrafficVehicleType = vehicle_type
+        self.coordinate = VehicleCoordinate(anchors, window_size)
         
-        self.coordinate = VehicleCoordinate(
-            initial_centroid, 
-            initial_routing_point, 
-            initial_footprint_left, 
-            initial_footprint_right, 
-            window_size
-        )
         self.current_bbox = (0,0,0,0)
         self.is_stable: bool = False
         self.violation_state = VehicleViolationState()
 
-        self.first_frame: Optional[np.ndarray] = None
+        # Nén ảnh dạng bytes
+        self._first_frame_bytes: Optional[bytes] = None
+        self._violation_frames_bytes: Dict[str, bytes] = {}
         self.first_bbox: Optional[Tuple[int, int, int, int]] = None
-        
-        self.violation_frames: Dict[str, np.ndarray] = {}
         self.violation_bboxes: Dict[str, Tuple[int, int, int, int]] = {}
 
+    def set_first_frame(self, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> None:
+        success, encoded_image = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+        if success:
+            self._first_frame_bytes = encoded_image.tobytes()
+            self.first_bbox = bbox
+
+
+    def get_first_frame(self) -> Optional[np.ndarray]:
+        if not self._first_frame_bytes: return None
+        return cv2.imdecode(np.frombuffer(self._first_frame_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+    def add_violation_frame(self, violation_code: str, frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> None:
+        success, encoded_image = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+        if success:
+            self._violation_frames_bytes[violation_code] = encoded_image.tobytes()
+            self.violation_bboxes[violation_code] = bbox
+
+    def get_violation_frame(self, violation_code: str) -> Optional[np.ndarray]:
+        byte_data = self._violation_frames_bytes.get(violation_code)
+        if not byte_data: return None
+        return cv2.imdecode(np.frombuffer(byte_data, np.uint8), cv2.IMREAD_COLOR)
+
+    # --- Properties (Delegation) ---
     @property
-    def current_position(self) -> Vertex: return self.coordinate.current_position
+    def current_position(self) -> Vertex: return self.coordinate.current_anchors.centroid
+    @property
+    def previous_position(self) -> Optional[Vertex]: 
+        return self.coordinate.previous_anchors.centroid if self.coordinate.previous_anchors else None
+    
+    @property
+    def routing_point(self) -> Vertex: return self.coordinate.current_anchors.routing_point
+    @property
+    def previous_routing_point(self) -> Optional[Vertex]: 
+        return self.coordinate.previous_anchors.routing_point if self.coordinate.previous_anchors else None
 
     @property
-    def previous_position(self) -> Optional[Vertex]: return self.coordinate.previous_position
+    def footprint_left(self) -> Optional[Vertex]: return self.coordinate.current_anchors.left_wheel
+    @property
+    def previous_footprint_left(self) -> Optional[Vertex]: 
+        return self.coordinate.previous_anchors.left_wheel if self.coordinate.previous_anchors else None
+
+    @property
+    def footprint_right(self) -> Optional[Vertex]: return self.coordinate.current_anchors.right_wheel
+    @property
+    def previous_footprint_right(self) -> Optional[Vertex]: 
+        return self.coordinate.previous_anchors.right_wheel if self.coordinate.previous_anchors else None
 
     @property
     def direction(self) -> Vector2D: return self.coordinate.direction
-
-    @property
-    def position_history(self) -> Deque[Vertex]: return self.coordinate.position_history
-
-    @property
-    def routing_point(self) -> Vertex: return self.coordinate.routing_point
-
-    @property
-    def previous_routing_point(self) -> Optional[Vertex]: return self.coordinate.previous_routing_point
-
-    @property
-    def footprint_left(self) -> Vertex: return self.coordinate.footprint_left
-
-    @property
-    def previous_footprint_left(self) -> Optional[Vertex]: return self.coordinate.previous_footprint_left
-
-    @property
-    def footprint_right(self) -> Vertex: return self.coordinate.footprint_right
-
-    @property
-    def previous_footprint_right(self) -> Optional[Vertex]: return self.coordinate.previous_footprint_right
-
     @property
     def stationary_frames(self) -> int: return self.coordinate.stationary_frames
-
     @property
     def active_violations(self) -> set: return self.violation_state.active_violations
-    
-    def update_position(self, new_centroid: Vertex, new_routing_point: Vertex, new_footprint_left: Vertex, new_footprint_right: Vertex) -> None:
-        self.coordinate.update_position(new_centroid, new_routing_point, new_footprint_left, new_footprint_right)
 
-    def is_moving(self, movement_threshold: float = 1.0) -> bool:
-        return self.coordinate.is_moving(movement_threshold)
+    def is_moving(self, threshold: float = 2.0) -> bool: return self.coordinate.is_moving(threshold)
 
 
-class VehicleManager:
-    """
-        Lớp này phụ trách quản lý vòng đời phương tiện
-    """
+# ==========================================
+# 2. UTILITY CLASSES
+# ==========================================
 
-    # Cấu hình sẵn các tham số tương ứng với tọa độ bánh xe cho phương tiện
-    ANCHOR_CONFIG = {
+class BBoxSmoother:
+    def __init__(self, alpha: float = 0.8, max_growth_ratio: float = 1.15):
+        self.alpha = alpha
+        self.max_growth_ratio = max_growth_ratio
+        self._vehicle_sizes: Dict[int, Tuple[float, float]] = {}
+
+    def smooth(self, vehicle_id: int, raw_w: float, raw_h: float) -> Tuple[float, float]:
+        if vehicle_id not in self._vehicle_sizes:
+            self._vehicle_sizes[vehicle_id] = (raw_w, raw_h)
+            return raw_w, raw_h
+
+        old_w, old_h = self._vehicle_sizes[vehicle_id]
+        target_w = min(raw_w, old_w * self.max_growth_ratio)
+        target_h = min(raw_h, old_h * self.max_growth_ratio)
+
+        smooth_w = self.alpha * target_w + (1.0 - self.alpha) * old_w
+        smooth_h = self.alpha * target_h + (1.0 - self.alpha) * old_h
+
+        self._vehicle_sizes[vehicle_id] = (smooth_w, smooth_h)
+        return smooth_w, smooth_h
+
+    def clear(self, vehicle_id: int) -> None:
+        if vehicle_id in self._vehicle_sizes:
+            del self._vehicle_sizes[vehicle_id]
+
+
+class VehicleAnchorCalculator:
+    DEFAULT_CONFIG = {
         TrafficVehicleType.CAR:         {'y_drop_ratio': 0.90, 'x_shrink_ratio': 0.15},
         TrafficVehicleType.TRUCK:       {'y_drop_ratio': 0.95, 'x_shrink_ratio': 0.25},
         TrafficVehicleType.BUS:         {'y_drop_ratio': 0.95, 'x_shrink_ratio': 0.25},
@@ -191,169 +200,105 @@ class VehicleManager:
         TrafficVehicleType.BICYCLE:     {'y_drop_ratio': 0.98, 'x_shrink_ratio': 0.0},
         TrafficVehicleType.UNKNOWN:     {'y_drop_ratio': 0.90, 'x_shrink_ratio': 0.10},
     }
-    def __init__(self, value: int = 10):
-        # Định nghĩa tham số xác định rằng một phương tiện được cho là rời khỏi khu vực
-        self.max_frame_lost = value
 
-        # Danh sách dictionary[id, Vehicle] lưu các phương tiện chưa rời khỏi khung hình hoặc mất dấu
-        self._active_vehicles: Dict[int, Vehicle] = {}
-        self._lost_tracks: Dict[int, int] = {}
-        self._vehicle_sizes: Dict[int, Tuple[float, float]] = {}
+    def __init__(self, config: Optional[Dict] = None):
+        self.config = config or self.DEFAULT_CONFIG
 
-    @staticmethod
-    def _to_scalar(val) -> float:
-        try:
-            return float(np.asarray(val).flatten()[0])
-        except Exception:
-            return float(val)
-
-    # Làm mịn kết quả bounding box với bộ lọc nhiễu EMA
-    def _smooth_bbox_size(self, vehicle_id: int, raw_w: float, raw_h: float) -> Tuple[float, float]:
-        if self.is_new_vehicle(vehicle_id):
-            self._vehicle_sizes[vehicle_id] = (raw_w, raw_h)
-            return raw_w, raw_h
-
-        old_w, old_h = self._vehicle_sizes[vehicle_id]
-
-        #Không cho phép bbox vượt quá 15% chỉ trong 1 khung hình
-        target_w = min(raw_w, old_w * 1.15)
-        target_h = min(raw_h, old_h * 1.15)
-
-        # Bộ lọc EMA với tham số alpha = 0.5
-        alpha = 0.5
-        smooth_w = alpha * raw_w + (1.0 - alpha) * old_w
-        smooth_h = alpha * raw_h + (1.0 - alpha) * old_h
-
-        self._vehicle_sizes[vehicle_id] = (smooth_w, smooth_h)
-        return smooth_w, smooth_h
-    
-    @staticmethod
-    def calculate_anchors(
-        x1: float, y1: float, x2: float, y2: float, vehicle_type: TrafficVehicleType
-    ) -> Tuple[Vertex, Vertex, Vertex, Vertex]:
-        width = x2 - x1
-        height = y2 - y1
+    def calculate(self, x1: float, y1: float, x2: float, y2: float, vehicle_type: TrafficVehicleType) -> VehicleAnchors:
+        width, height = x2 - x1, y2 - y1
         center_x = x1 + width / 2.0
-        
-        # Tâm xe
         centroid = Vertex(center_x, y1 + height / 2.0)
         
-        # Tính tọa độ đã được "dời"
-        config = VehicleManager.ANCHOR_CONFIG.get(vehicle_type, VehicleManager.ANCHOR_CONFIG[TrafficVehicleType.UNKNOWN])
-        
-        road_contact_y = y1 + (height * config['y_drop_ratio'])
-        
-        # Tọa độ gần với footprint có "dời" một khoảng y
+        cfg = self.config.get(vehicle_type, self.config[TrafficVehicleType.UNKNOWN])
+        road_contact_y = y1 + (height * cfg['y_drop_ratio'])
         routing_point = Vertex(center_x, road_contact_y)
 
-        # Kiểm tra loại  xe
         if vehicle_type in [
-            TrafficVehicleType.CAR,
-            TrafficVehicleType.BUS,
-            TrafficVehicleType.CONTAINER,
-            TrafficVehicleType.TRUCK
+            TrafficVehicleType.CAR, TrafficVehicleType.BUS, 
+            TrafficVehicleType.CONTAINER, TrafficVehicleType.TRUCK
         ]:
-            # Định nghĩa bánh xe trái và bánh xe phải
-            shrink_amount = width * config['x_shrink_ratio']
-            footprint_left = Vertex(x1 + shrink_amount, road_contact_y)
-            footprint_right = Vertex(x2 - shrink_amount, road_contact_y)
+            shrink_amount = width * cfg['x_shrink_ratio']
+            left_wheel = Vertex(x1 + shrink_amount, road_contact_y)
+            right_wheel = Vertex(x2 - shrink_amount, road_contact_y)
+            return VehicleAnchors(centroid, routing_point, left_wheel, right_wheel)
         else:
-            # Định nghĩa bánh xe trái và phải bằng bánh xe dưới ~ routing_point
-            footprint_left = Vertex(center_x, road_contact_y)
-            footprint_right = Vertex(center_x, road_contact_y)
-        return centroid, routing_point, footprint_left, footprint_right
+            return VehicleAnchors(centroid, routing_point)
+
+
+# ==========================================
+# 3. MANAGER
+# ==========================================
+
+class VehicleManager:
+    def __init__(self, max_frame_lost: int = 20):
+        self.max_frame_lost = max_frame_lost
+        self._active_vehicles: Dict[int, Vehicle] = {}
+        self._lost_tracks: Dict[int, int] = {}
+        
+        self._smoother = BBoxSmoother()
+        self._anchor_calculator = VehicleAnchorCalculator()
 
     def load_from_detections(
         self, detections: List[Tuple[int, TrafficVehicleType, float, float, float, float]],
-        frame_shape: Tuple[int, int]
+        frame_shape: Tuple[int, int], raw_frame: np.ndarray
     ) -> List[Vehicle]:
         
         seen_this_frame = set()
-        
-        # Bóc tách kích thước ảnh an toàn
-        h_img, w_img = int(self._to_scalar(frame_shape[0])), int(self._to_scalar(frame_shape[1]))
+        h_img, w_img = int(frame_shape[0]), int(frame_shape[1])
         margin = 5
 
         for track_id, vehicle_type, x1, y1, x2, y2 in detections:
-            # 1. Chuẩn hóa dữ liệu đầu vào
-            v_id = int(self._to_scalar(track_id))
+            v_id = int(track_id)
             seen_this_frame.add(v_id)
 
-            _x1, _y1 = self._to_scalar(x1), self._to_scalar(y1)
-            _x2, _y2 = self._to_scalar(x2), self._to_scalar(y2)
-
+            _x1, _y1, _x2, _y2 = float(x1), float(y1), float(x2), float(y2)
             raw_w, raw_h = _x2 - _x1, _y2 - _y1
             center_x, top_y = (_x1 + _x2) / 2.0, _y1
 
-            # 2. Bộ lọc kháng nhiễu Bbox
-            smooth_w, smooth_h = self._smooth_bbox_size(v_id, raw_w, raw_h)
-
-            # 3. Tái tạo Bbox an toàn
+            smooth_w, smooth_h = self._smoother.smooth(v_id, raw_w, raw_h)
             safe_x1, safe_y1 = center_x - smooth_w / 2.0, top_y
             safe_x2, safe_y2 = center_x + smooth_w / 2.0, top_y + smooth_h
+            current_bbox = (int(safe_x1), int(safe_y1), int(safe_x2), int(safe_y2))
 
-            # 4. Sinh điểm neo định tuyến
-            centroid, r_point, foot_l, foot_r = self.calculate_anchors(
-                safe_x1, safe_y1, safe_x2, safe_y2, vehicle_type
-            )
+            current_anchors = self._anchor_calculator.calculate(safe_x1, safe_y1, safe_x2, safe_y2, vehicle_type)
 
-            # 5. Cập nhật vòng đời phương tiện
-            if self.is_new_vehicle(v_id):
-                self.add_vehicle(v_id, vehicle_type, centroid, r_point, foot_l, foot_r)
+            if v_id not in self._active_vehicles:
+                self._add_vehicle(v_id, vehicle_type, current_anchors)
+                self._active_vehicles[v_id].set_first_frame(raw_frame, current_bbox)
             else:
-                self.update_vehicle(v_id, centroid, r_point, foot_l, foot_r)
+                self._active_vehicles[v_id].coordinate.update(current_anchors)
+                self._lost_tracks[v_id] = 0
 
-            # 6. Ghi nhận siêu dữ liệu cho Bằng chứng (Metadata)
             vehicle = self._active_vehicles[v_id]
-            vehicle.current_bbox = (int(safe_x1), int(safe_y1), int(safe_x2), int(safe_y2))
+            vehicle.current_bbox = current_bbox
 
             is_touching_border = (
                 safe_x1 <= margin or safe_y1 <= margin or 
                 safe_x2 >= (w_img - margin) or safe_y2 >= (h_img - margin)
             )
-            vehicle.is_stable = (vehicle.coordinate.age >= 5) and (is_touching_border)
+            vehicle.is_stable = (vehicle.coordinate.age >= 5) and (not is_touching_border)
 
-        # 7. Dọn dẹp các phương tiện mất dấu
         self._cleanup_lost_tracks(seen_this_frame)
-
         return [self._active_vehicles[t_id] for t_id in seen_this_frame]
     
+    def _add_vehicle(self, v_id: int, v_type: TrafficVehicleType, anchors: VehicleAnchors) -> None:
+        self._active_vehicles[v_id] = Vehicle(v_id, v_type, anchors)
+        self._lost_tracks[v_id] = 0
+
     def _cleanup_lost_tracks(self, seen_this_frame: set) -> None:
         active_track_ids = list(self._active_vehicles.keys()) 
         for v_id in active_track_ids:
             if v_id not in seen_this_frame:
                 self._lost_tracks[v_id] += 1
                 if self._lost_tracks[v_id] > self.max_frame_lost:
-                    self.del_vehicle(v_id)   
+                    self._del_vehicle(v_id)   
 
-    def is_new_vehicle(self, vehicle_id: int) -> bool:
-        return int(vehicle_id) not in self._active_vehicles
-    
-    def add_vehicle(self, vehicle_id: int, vehicle_type: TrafficVehicleType, current_centroid: Vertex, current_routing_point: Vertex, current_left: Vertex, current_right: Vertex) -> None:
-        v_id = int(vehicle_id)
-        new_vehicle = Vehicle(
-            track_id=v_id, vehicle_type=vehicle_type, 
-            initial_centroid=current_centroid,
-            initial_routing_point=current_routing_point,
-            initial_footprint_left=current_left,
-            initial_footprint_right=current_right
-        )
-        self._active_vehicles[v_id] = new_vehicle
-        self._lost_tracks[v_id] = 0
-
-    def update_vehicle(self, vehicle_id: int, current_centroid: Vertex, current_routing_point: Vertex, current_left: Vertex, current_right: Vertex) -> None:
-        v_id = int(vehicle_id)
-        self._active_vehicles[v_id].update_position(current_centroid, current_routing_point, current_left, current_right)
-        self._lost_tracks[v_id] = 0
-
-    def del_vehicle(self, vehicle_id: int) -> None:
-        v_id = int(vehicle_id)
-        self._active_vehicles[v_id].violation_state.clear()
-        del self._active_vehicles[v_id]
-        del self._lost_tracks[v_id]
-        # [CẬP NHẬT: Dọn dẹp bộ nhớ sizes]
-        if v_id in self._vehicle_sizes:
-            del self._vehicle_sizes[v_id]
+    def _del_vehicle(self, v_id: int) -> None:
+        if v_id in self._active_vehicles:
+            self._active_vehicles[v_id].violation_state.clear()
+            del self._active_vehicles[v_id]
+            del self._lost_tracks[v_id]
+            self._smoother.clear(v_id)
 
     def get_all_active_vehicles(self) -> List[Vehicle]:
         return list(self._active_vehicles.values())

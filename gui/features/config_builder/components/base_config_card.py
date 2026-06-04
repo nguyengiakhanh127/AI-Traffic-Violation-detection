@@ -22,7 +22,12 @@ class BaseConfigCard(QFrame):
                 border-radius: 5px;
                 margin-bottom: 5px;
             }}
-            QLabel {{ color: #ccc; }}
+            QLabel {{ 
+                color: #cccccc; 
+                background-color: transparent; 
+                border: none;
+                font-weight: bold
+            }}
         """)
         self._setup_base_ui(title, icon_name)
 
@@ -47,7 +52,7 @@ class BaseConfigCard(QFrame):
         btn_delete = QPushButton()
         btn_delete.setIcon(QIcon(os.path.join(os.path.dirname(icon_path), "delete.png")))
         btn_delete.setFixedSize(20, 20)
-        btn_delete.setStyleSheet("background-color: #d9534f; border-radius: 10px; font-weight: bold; color: white;")
+        btn_delete.setStyleSheet("border-radius: 10px; font-weight: bold; color: white;")
         btn_delete.clicked.connect(lambda: self.request_delete.emit(self))
 
         header_layout.addWidget(lbl_icon)

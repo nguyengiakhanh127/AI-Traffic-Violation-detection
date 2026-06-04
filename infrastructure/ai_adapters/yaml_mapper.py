@@ -8,10 +8,8 @@ class YAML_ClassMapper:
         self.mapping_rules: Dict[TrafficVehicleType, List[str]] = {
             TrafficVehicleType.CAR: ['car', 'suv', 'sedan', 'van'],
             TrafficVehicleType.MOTORCYCLE: ['motorcycle', 'motorbike', 'scooter'],
-            TrafficVehicleType.BICYCLE: ['bicycle'],
             TrafficVehicleType.BUS: ['bus'],
-            TrafficVehicleType.TRUCK: ['truck'],
-            TrafficVehicleType.CONTAINER: ['container_truck', 'trailer']
+            TrafficVehicleType.TRUCK: ['truck']
         }
 
     def get_vehicle_type(self, object_id: int) -> TrafficVehicleType:

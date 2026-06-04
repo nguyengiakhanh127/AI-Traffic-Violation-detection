@@ -51,26 +51,26 @@ class ReviewerController(QObject):
         self._fetch_and_update_table()
 
     def _fetch_and_update_table(self):
-        """Hành động cốt lõi: Tính toán offset, query DB và nhét vào Bảng"""
-        # 1. Đếm tổng số bản ghi thỏa mãn điều kiện
-        total_records = self.db.get_total_count(self.current_filters)
+        # 1. Gọi vào Repository (Thêm '.violations.')
+        total_records = self.db.violations.get_total_count(self.current_filters)
         total_pages = math.ceil(total_records / self.items_per_page)
         
-        # Rào chắn: Không cho lật quá trang cuối cùng
         if total_pages > 0 and self.current_page > total_pages:
             self.current_page = total_pages
         elif total_pages == 0:
             self.current_page = 1
 
-        # 2. Truy vấn dữ liệu thực tế (Phân trang)
-        offset = (self.current_page - 1) * self.items_per_page
-        data_list = self.db.get_violations(
-            limit=self.items_per_page, 
-            offset=offset, 
-            filters=self.current_filters
-        )
+        if total_records == 0:
+            data_list = []
+        else:
+            offset = max(0, (self.current_page - 1) * self.items_per_page)
+            # 2. Gọi vào Repository (Thêm '.violations.')
+            data_list = self.db.violations.get_list(
+                limit=self.items_per_page, 
+                offset=offset, 
+                filters=self.current_filters
+            )
 
-        # 3. Ném cục dữ liệu sang cho UI tự lo phần vẽ vời
         self.view.data_table.load_data(data_list, self.current_page, total_pages)
 
     @pyqtSlot(int, int)

@@ -23,7 +23,7 @@ logger = logging.getLogger("AIVisionThread")
 class AIVisionThread(QThread):
     """
     Luồng (Thread) xử lý AI chạy nền thời gian thực.
-    Đảm nhận việc đọc Video -> Chạy YOLO + ByteTrack -> Định tuyến và Duyệt luật -> Phát tín hiệu hiển thị lên GUI.
+    Đảm nhận việc đọc Video -> Chạy YOLO + ByteTrack -> Định tuyến và Duyệt luật -> Phát tín hiệu.
     """
     # Phát tín hiệu mang theo frame gốc và danh sách phương tiện đã được xử lý xong
     frame_processed = pyqtSignal(np.ndarray, list, object)
@@ -34,19 +34,21 @@ class AIVisionThread(QThread):
         self, 
         detection_service: DetectionService, 
         violation_service: ViolationService,
-        model_path: str = paths.MODEL_DIR,
+        traffic_lights: list, 
+        model_path: str = paths.VEHICLE_DETECTION_OPENVINO_MODEL,
         parent=None
     ):
         super().__init__(parent)
         self.detection_service = detection_service
         self.violation_service = violation_service
+        self.traffic_lights = traffic_lights
         self.model_path = model_path
         
         self.video_path = ""
         self.is_playing = False
         self.is_paused = False
         self.cap = None
-        self.delay = 0.03 # Giãn cách frame theo FPS
+        self.delay = 0.03
 
         self.ai_enabled = False
 
@@ -96,7 +98,7 @@ class AIVisionThread(QThread):
 
         self.is_playing = True
         
-        # [CẬP NHẬT AN TOÀN]: Dùng khối try...finally để bảo vệ việc dọn rác
+        # Dùng khối try...finally để bảo vệ việc dọn rác ngay cả khi xảy ra lỗi đột ngột
         try:
             while self.is_playing and self.cap and self.cap.isOpened():
                 if self.is_paused:
@@ -109,26 +111,24 @@ class AIVisionThread(QThread):
 
                     # CHẾ ĐỘ 1: PHÁT QUÉT LUẬT AI (Kích hoạt khi bấm nút START AI)
                     if self.ai_enabled and model is not None and tracker is not None:
+                        # 1. Đẩy frame vào RingBuffer (Nén JPEG In-Memory ngầm trong này)
                         self.violation_service.video_buffer.push(frame)
 
-                        results = model(frame, 
-                                        verbose=False,
-                                        classes=[1,2,3,5],
-                                        conf=0.4,
-                                        device="cpu")[0]
+                        # 2. Chạy YOLO (Bỏ tham số device="cpu" để tự động dùng GPU/NPU nếu có)
+                        results = model(frame, verbose=False, conf=0.3)[0]
                         detections = sv.Detections.from_ultralytics(results)
                         tracked_detections = tracker.update_with_detections(detections)
 
+                        # 3. Chuyển cho DetectionService xử lý (Truyền frame vào để nén ảnh tự động)
                         active_vehicles = self.detection_service.process_frame(frame, tracked_detections)
 
-                        for vehicle in active_vehicles:
-                            if vehicle.coordinate.age == 1 and vehicle.first_frame is None:
-                                vehicle.first_frame = frame.copy()
-                                vehicle.first_bbox = vehicle.current_bbox
+                        # [ĐÃ XÓA]: Đoạn mã gán `vehicle.first_frame = frame.copy()` cũ kỹ và tốn RAM. 
+                        # Việc nén ảnh (First Seen) đã được DetectionService và VehicleManager làm tự động!
 
-                        self.violation_service.inspect_and_log(active_vehicles, current_time, frame)
+                        # 4. Kiểm tra Luật và kích hoạt lưu Bằng chứng (Non-blocking)
+                        self.violation_service.inspect_and_log(active_vehicles, current_time, frame, self.traffic_lights)
                         
-                        # Phát tín hiệu mang theo frame gốc và dữ liệu xe đã xử lý
+                        # 5. Phát tín hiệu mang theo frame gốc và dữ liệu xe đã xử lý để vẽ UI
                         self.frame_processed.emit(frame, active_vehicles, tracked_detections)
                     
                     # CHẾ ĐỘ 2: PHÁT VIDEO TĨNH PHỤC VỤ VẼ CẤU HÌNH (Mặc định khi mới nạp file)
@@ -142,12 +142,12 @@ class AIVisionThread(QThread):
                     break
                     
         finally:
-            # =========================================================================
-            # [BẮT BUỘC CHẠY]: GIẢI PHÓNG TOÀN BỘ BỘ NHỚ RAM KHI LUỒNG KẾT THÚC
-            # =========================================================================
             self.is_playing = False
             
-            # 1. Hủy đối tượng Model YOLO và Tracker để ép giải phóng RAM
+            # [CẬP NHẬT 3]: ÉP CHỜ TRƯỚC KHI DỌN DẸP BỘ NHỚ
+            if hasattr(self.violation_service, 'video_buffer') and self.ai_enabled:
+                self.violation_service.video_buffer.wait_for_export_finish(timeout_sec=10)
+            
             if model is not None:
                 del model
                 model = None
@@ -155,11 +155,12 @@ class AIVisionThread(QThread):
                 del tracker
                 tracker = None
                 
-            # 2. Xả sạch bộ đệm Video Ring Buffer (Giải phóng ngay 5.5 GB RAM nếu có)
             if hasattr(self.violation_service, 'video_buffer'):
                 self.violation_service.video_buffer.clear()
+            
+            if hasattr(self.violation_service, 'shutdown'):
+                self.violation_service.shutdown()
                 
-            # 3. Ép Python kích hoạt Garbage Collector để dọn rác bộ nhớ ngay lập tức
             import gc
             gc.collect()
             
@@ -171,23 +172,18 @@ class AIVisionThread(QThread):
     # =========================================================================
     def stop(self):
         """Dừng luồng chủ động và dọn dẹp bộ nhớ"""
-        # 1. Phát cờ tắt vòng lặp
         self.is_playing = False
         self.is_paused = False
         
-        # 2. Đợi luồng ngầm dừng hẳn để đảm bảo an toàn bộ nhớ (Tránh lỗi SegFault)
         self.wait()
         
-        # 3. Giải phóng Camera
         if self.cap:
             self.cap.release()
             self.cap = None
             
-        # 4. Xả sạch bộ đệm Video Ring Buffer
         if hasattr(self.violation_service, 'video_buffer'):
             self.violation_service.video_buffer.clear()
             
-        # 5. Triệu gọi trình dọn rác của Python
         import gc
         gc.collect()
         
@@ -201,7 +197,6 @@ class AIVisionThread(QThread):
             if ret:
                 # Khi tua, phát frame tĩnh không chạy AI để tránh giật lag
                 self.frame_processed.emit(frame, [], None)
-
 
     def toggle_pause(self):
         self.is_paused = not self.is_paused

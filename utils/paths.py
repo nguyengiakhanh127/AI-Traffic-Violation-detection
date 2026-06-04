@@ -12,6 +12,13 @@ CURSORS_DIR = os.path.join(PROJECT_ROOT, "gui", "assets", "cursors")
 
 # Tầng Dữ liệu (Data)
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, "data", "configs")
-MODEL_DIR = os.path.join(PROJECT_ROOT, "yolo26n_openvino_model") # OPEN VINO
+
+VEHICLE_DETECTION_STANDARD_MODEL = os.path.join(PROJECT_ROOT, r"model\yolo\standard_format\vehicle_detection\best.pt") 
+VEHICLE_DETECTION_OPENVINO_MODEL = os.path.join(PROJECT_ROOT, r"model\yolo\openVINO_format\vehicle_detection\best_openvino_model")
+
+YAML = os.path.join(PROJECT_ROOT, r"model\yaml\hutech.yaml") 
+
+LICENSE_PLATE_DETECTION_OPENVINO_MODEL = os.path.join(PROJECT_ROOT, r"license-plate-finetune-v1x.pt")
+
 EVIDENCE_DIR = os.path.join(PROJECT_ROOT, "Evidence")
 # --- END OF FILE utils/paths.py ---

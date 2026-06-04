@@ -3,12 +3,12 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt6.QtCore import Qt, QDateTime
 from gui.shared_components.event_broker import app_broker
 
-
-from core.rules import ViolationRegistry
 from core.rules import ViolationRegistry, VehicleRegistry
 from utils.enums import TrafficVehicleType
 
 class FilterPanel(QWidget):
+    # ... [__init__ và _setup_ui GIỮ NGUYÊN] ...
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("FilterPanel")
@@ -54,34 +54,25 @@ class FilterPanel(QWidget):
         self.input_plate.setPlaceholderText("Nhập biển số...")
         grid.addWidget(self.input_plate, 3, 0, 1, 2)
 
-        # -----------------------------------------------------------------
-        # COMBOBOX LỖI VI PHẠM (Chỉ cần 3 dòng code nhờ hàm hỗ trợ từ Core)
-        # -----------------------------------------------------------------
         grid.addWidget(QLabel("Loại cảnh báo:"), 0, 2)
         self.combo_error = QComboBox()
         self.combo_error.addItem("--- Tất cả ---", userData=None)
         
-        # UI chỉ việc gọi Core và nhét vào ComboBox
         for name_vn, code_en in ViolationRegistry.get_all_for_ui():
             self.combo_error.addItem(name_vn, userData=code_en)
                 
         grid.addWidget(self.combo_error, 1, 2)
 
-        # -----------------------------------------------------------------
-        # COMBOBOX ĐỐI TƯỢNG (Gọi VehicleRegistry)
-        # -----------------------------------------------------------------
         grid.addWidget(QLabel("Đối tượng:"), 2, 2)
         self.combo_vehicle = QComboBox()
         self.combo_vehicle.addItem("--- Tất cả ---", userData=None)
         
         for e in TrafficVehicleType:
             if e not in [TrafficVehicleType.UNKNOWN, TrafficVehicleType.SPECIAL]:
-                # UI nhờ Core dịch giùm
                 name_vn = VehicleRegistry.get_name(e)
                 self.combo_vehicle.addItem(name_vn, userData=e.name)
                 
         grid.addWidget(self.combo_vehicle, 3, 2)
-
         layout.addLayout(grid)
 
         btn_layout = QHBoxLayout()
@@ -103,7 +94,6 @@ class FilterPanel(QWidget):
 
         grid.addWidget(QLabel("Trạng thái:"), 0, 3)
         self.combo_status = QComboBox()
-        # userData chính là mã status lưu trong DB: 0, 1, -1
         self.combo_status.addItem("Chờ kiểm duyệt", userData=0) 
         self.combo_status.addItem("Đã duyệt", userData=1)
         self.combo_status.addItem("Đã hủy bỏ", userData=-1)
@@ -118,16 +108,13 @@ class FilterPanel(QWidget):
         self.emit_search() 
 
     def emit_search(self):
-        """
-        [CẬP NHẬT 5]: Dùng currentData() thay vì currentText() 
-        để lấy Mã Code chuẩn (ví dụ: DI_SAI_LAN) gửi cho Database
-        """
+        """[CẬP NHẬT KEY]: Đồng bộ tên Key với DatabaseService mới"""
         filters = {
             "start_time": self.dt_start.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
             "end_time": self.dt_end.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
-            "plate": self.input_plate.text().strip(),
-            "error_code": self.combo_error.currentData(),   # Lấy data ẩn
-            "vehicle_type": self.combo_vehicle.currentData(), # Lấy data ẩn
-            "status": self.combo_status.currentData()
+            "bien_so": self.input_plate.text().strip(),             # Đổi từ 'plate'
+            "ma_loi": self.combo_error.currentData(),               # Đổi từ 'error_code'
+            "loai_xe": self.combo_vehicle.currentData(),            # Đổi từ 'vehicle_type'
+            "trang_thai": self.combo_status.currentData()           # Đổi từ 'status'
         }
         app_broker.request_search_violations.emit(filters)

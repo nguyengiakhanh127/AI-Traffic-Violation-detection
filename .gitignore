@@ -1,1 +1,6 @@
 .venv/
+roi.txt
+traffic_records.db
+utilss.py
+simple_demo.py
+license-plate-finetune-v1x.pt

@@ -43,12 +43,13 @@ class WorkspaceManager(QObject):
         
         app_broker.rule_updated.connect(self.handle_rule_update)
 
+        app_broker.request_delete_entity.connect(self.handle_delete_entity_request)
+
     def _wire_canvas_signals(self):
         """Lắng nghe tín hiệu khi Canvas vẽ xong hoặc xóa đồ họa"""
         self.canvas.polygon_completed.connect(self.handle_new_polygon)
         self.canvas.bbox_completed.connect(self.handle_new_bbox)
         self.canvas.line_completed.connect(self.handle_new_line)
-        self.canvas.item_deleted.connect(self.handle_item_deleted)
 
     def broadcast_registry(self):
         """Bắn tín hiệu cập nhật danh sách ID xuống Panel"""
@@ -120,10 +121,17 @@ class WorkspaceManager(QObject):
         self.object_registry["POLYGONS"][entity_id] = poly_entity
         self.broadcast_registry()
         
+        # [CẬP NHẬT]: Ép Thẻ (Lane/Zone) Link vào ID này
         if self.active_drawing_card is not None:
+            # Gán thẳng ID vào combo_ref
             self.active_drawing_card.current_obj_id = entity_id
+            
+            # Ép ComboBox hiển thị ID này (Bắt buộc phải set bằng code vì ta đã tắt auto-select ở bước 1)
             idx = self.active_drawing_card.combo_ref.findText(entity_id)
-            if idx >= 0: self.active_drawing_card.combo_ref.setCurrentIndex(idx)
+            if idx >= 0: 
+                self.active_drawing_card.combo_ref.setCurrentIndex(idx)
+                
+            # Render sub-edges
             self.handle_edge_count_request(self.active_drawing_card, entity_id)
             self.active_drawing_card = None 
 
@@ -133,28 +141,25 @@ class WorkspaceManager(QObject):
         self.object_registry["BBOXES"][entity_id] = bbox_entity
         self.broadcast_registry()
         
+        # [CẬP NHẬT]
         if self.active_drawing_card is not None:
             self.active_drawing_card.update_bbox_data(entity_id)
-            self.active_drawing_card = None 
+            self.active_drawing_card = None
 
     @pyqtSlot(tuple)
     def handle_new_line(self, data_tuple):
         entity_id, line_entity = data_tuple
         self.object_registry["LINES"][entity_id] = line_entity
-        self.broadcast_registry()
+        self.broadcast_registry() # Vẫn báo cho mọi người biết để có ID trong danh sách
         
+        # [CẬP NHẬT]: Ép duy nhất cái Thẻ (Card) vừa yêu cầu vẽ phải Link vào ID này
         if self.active_drawing_card is not None and self.active_drawing_role is not None:
+            # Gọi thẳng hàm của LightConfigWidget
             self.active_drawing_card.update_edges_data(self.active_drawing_role, entity_id)
+            
+            # Xóa dấu vết yêu cầu
             self.active_drawing_card = None
             self.active_drawing_role = None
-
-    @pyqtSlot(str)
-    def handle_item_deleted(self, entity_id: str):
-        for category_dict in self.object_registry.values():
-            if entity_id in category_dict:
-                del category_dict[entity_id]
-                break
-        self.broadcast_registry()
 
     @pyqtSlot(str)
     def handle_highlight_on(self, entity_id: str):
@@ -196,5 +201,56 @@ class WorkspaceManager(QObject):
             self.object_registry["RULES"][new_id] = allowed_vehicles
             
         self.broadcast_registry()
+    
+    @pyqtSlot(str)
+    def handle_delete_entity_request(self, entity_id: str):
+        """Tiêu diệt đối tượng đồ họa an toàn, bảo vệ các Đỉnh dùng chung (Shared Nodes)"""
+        for category, obj_dict in self.object_registry.items():
+            if entity_id in obj_dict:
+                entity = obj_dict[entity_id]
+                
+                # 1. XÓA ĐA GIÁC (An toàn tuyệt đối)
+                if category == "POLYGONS":
+                    # Bước A: Tháo gỡ và xóa tất cả các CẠNH của Đa giác này
+                    for edge in entity.edges:
+                        # Rút cạnh này ra khỏi danh sách kết nối của 2 đỉnh đầu mút của nó
+                        edge.start_node.remove_edge(edge)
+                        edge.end_node.remove_edge(edge)
+                        # Rút khỏi màn hình
+                        self.canvas.scene.removeItem(edge)
+                        
+                    # Bước B: Phán xét sự sống chết của các ĐỈNH
+                    for node in entity.nodes:
+                        # Nếu Đỉnh này không còn kết nối với Cạnh nào khác (không ai dùng chung)
+                        if len(node.connected_edges) == 0:
+                            self.canvas.scene.removeItem(node)
+                            if node in self.canvas.all_nodes: 
+                                self.canvas.all_nodes.remove(node)
+                        else:
+                            # Đỉnh này đang được Đa giác khác dùng chung -> ĐỂ YÊN ĐÓ!
+                            pass 
+                            
+                    # Bước C: Xóa lớp màng màu (Fill)
+                    self.canvas.scene.removeItem(entity)
 
-# --- END OF FILE gui/features/config_builder/managers/workspace_manager.py ---
+                # 2. XÓA ĐƯỜNG THẲNG (Cũng dùng chung logic bảo vệ Đỉnh)
+                elif category == "LINES":
+                    entity.start_node.remove_edge(entity)
+                    entity.end_node.remove_edge(entity)
+                    
+                    self.canvas.scene.removeItem(entity)
+                    
+                    for node in [entity.start_node, entity.end_node]:
+                        if len(node.connected_edges) == 0:
+                            self.canvas.scene.removeItem(node)
+                            if node in self.canvas.all_nodes: 
+                                self.canvas.all_nodes.remove(node)
+
+                # 3. XÓA HỘP BBOX
+                elif category == "BBOXES":
+                    self.canvas.scene.removeItem(entity)
+
+                # 4. Xóa sổ sách
+                del obj_dict[entity_id]
+                self.broadcast_registry()
+                break

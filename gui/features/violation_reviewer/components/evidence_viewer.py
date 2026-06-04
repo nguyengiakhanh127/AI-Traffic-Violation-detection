@@ -1,4 +1,3 @@
-# --- START OF FILE gui/features/violation_reviewer/components/evidence_viewer.py ---
 import os
 import cv2
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -12,7 +11,10 @@ from core.rules import ViolationRegistry, VehicleRegistry
 from utils.enums import TrafficVehicleType, ViolationType
 from utils import paths
 from datetime import datetime
+
 class EvidenceViewer(QWidget):
+    # ... [__init__ và _setup_ui GIỮ NGUYÊN HOÀN TOÀN, CHỈ SỬA HÀM load_evidence BÊN DƯỚI] ...
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("EvidenceViewer")
@@ -27,7 +29,6 @@ class EvidenceViewer(QWidget):
             QFrame#DisplayFrame { background-color: #000000; border-radius: 5px; }
         """)
         
-        # Biến trạng thái
         self.current_folder = ""
         self.current_record_id = None
         self.image_files = []
@@ -46,7 +47,6 @@ class EvidenceViewer(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # 1. HEADER (Tiêu đề + Nút Tab Hình ảnh/Video)
         header_layout = QHBoxLayout()
         title = QLabel("Chi tiết sự kiện")
         title.setStyleSheet("color: white; font-weight: bold; font-size: 14px;")
@@ -64,7 +64,6 @@ class EvidenceViewer(QWidget):
         self.btn_tab_vid.setCheckable(True)
         self.btn_tab_vid.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
 
-        # Đảm bảo chỉ 1 tab được sáng lên
         self.btn_tab_img.toggled.connect(lambda c: self.btn_tab_vid.setChecked(not c))
         self.btn_tab_vid.toggled.connect(lambda c: self.btn_tab_img.setChecked(not c))
 
@@ -82,7 +81,6 @@ class EvidenceViewer(QWidget):
         header_layout.addWidget(self.btn_tab_vid)
         layout.addLayout(header_layout)
 
-        # 2. KHU VỰC TRÌNH CHIẾU (Stacked Widget: Chứa 2 màn hình xếp chồng nhau)
         self.stacked_widget = QStackedWidget()
         self.stacked_widget.setObjectName("DisplayFrame")
         self.stacked_widget.setMinimumHeight(350)
@@ -145,19 +143,16 @@ class EvidenceViewer(QWidget):
 
         layout.addWidget(self.stacked_widget, stretch=1)
 
-        # 3. THÔNG TIN CHI TIẾT (Footer)
         self.lbl_details = QLabel("Vui lòng chọn một bản ghi bên danh sách để xem chi tiết.")
         self.lbl_details.setWordWrap(True)
         self.lbl_details.setStyleSheet("color: white; padding-top: 10px;")
         layout.addWidget(self.lbl_details)
 
-        # Khi chuyển tab, tự động dừng video nếu đang phát
         self.stacked_widget.currentChanged.connect(self._on_tab_changed)
 
         self.action_layout = QHBoxLayout()
         self.action_layout.setContentsMargins(0, 15, 0, 0)
         
-        # Nút cho Trạng thái: CHỜ DUYỆT
         self.btn_approve = QPushButton("DUYỆT BẢN GHI")
         self.btn_approve.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "true.png")))
         self.btn_approve.setStyleSheet("background-color: #5cb85c; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
@@ -166,10 +161,9 @@ class EvidenceViewer(QWidget):
         self.btn_reject.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "false.png")))
         self.btn_reject.setStyleSheet("background-color: #d9534f; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
         
-        # Nút cho Trạng thái: ĐÃ DUYỆT
         self.btn_print = QPushButton("🖨️ IN BIÊN BẢN PHẠT NGUỘI")
         self.btn_print.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
-        self.btn_print.hide() # Mặc định ẩn
+        self.btn_print.hide()
 
         self.action_layout.addWidget(self.btn_reject)
         self.action_layout.addWidget(self.btn_approve)
@@ -178,37 +172,40 @@ class EvidenceViewer(QWidget):
         layout.addLayout(self.action_layout)
 
     def _wire_broker(self):
-        """Móc tai nghe vào trạm phát sóng để lắng nghe khi có dòng dữ liệu được chọn"""
         app_broker.violation_row_selected.connect(self.load_evidence)
 
+
     def load_evidence(self, record_data: dict):
-        self.current_folder = record_data.get('evidence_path', '')
+        """[CẬP NHẬT 1]: Chỉnh sửa lấy dữ liệu bằng Key Tiếng Việt"""
+        self.current_folder = record_data.get('duong_dan_bang_chung', '') # Đổi từ evidence_path
         self.current_record_id = record_data.get('id') 
 
-        # --- [CẬP NHẬT 2]: Dịch Dữ liệu y như bên Table ---
-        raw_error_code = record_data.get('violation_code', '')
+        raw_error_code = record_data.get('ma_loi_vi_pham', '') # Đổi từ violation_code
         ui_error_name = raw_error_code
-        status = record_data.get('is_reviewed', 0)
+        status = record_data.get('trang_thai_duyet', 0) # Đổi từ is_reviewed
 
-        if status == 0: # Chờ duyệt
+        # Ẩn hiện nút tương ứng trạng thái
+        if status == 0: 
             self.btn_approve.show()
             self.btn_reject.show()
             self.btn_print.hide()
-        elif status == 1: # Đã duyệt
+        elif status == 1: 
             self.btn_approve.hide()
             self.btn_reject.hide()
             self.btn_print.show()
-        else: # Đã hủy (-1)
+        else: 
             self.btn_approve.hide()
             self.btn_reject.hide()
             self.btn_print.hide()
 
+        # Dịch mã lỗi
         for v_type in ViolationType:
             if ViolationRegistry.get_code(v_type) == raw_error_code:
                 ui_error_name = ViolationRegistry.get_name(v_type)
                 break
 
-        raw_vehicle_type = record_data.get('vehicle_type', '')
+        # Dịch mã xe
+        raw_vehicle_type = record_data.get('loai_phuong_tien', '') # Đổi từ vehicle_type
         ui_vehicle_name = raw_vehicle_type
         try:
             enum_vehicle = TrafficVehicleType[raw_vehicle_type]
@@ -216,27 +213,29 @@ class EvidenceViewer(QWidget):
         except KeyError:
             pass
 
-        raw_time = record_data.get('timestamp', '')
+        # Dịch thời gian
+        raw_time = record_data.get('thoi_gian_vi_pham', '') # Đổi từ timestamp
         time_str = raw_time.strftime("%d/%m/%Y %H:%M:%S") if isinstance(raw_time, datetime) else str(raw_time)
 
+        # Cập nhật Label hiển thị HTML
         info_text = (
-            f"<b>Biển số:</b> <span style='color:#f39c12; font-size: 16px;'>{record_data.get('license_plate')}</span><br>"
+            f"<b>Biển số:</b> <span style='color:#f39c12; font-size: 16px;'>{record_data.get('bien_so_xe')}</span><br>"
             f"<b>Lỗi vi phạm:</b> {ui_error_name}<br>"
             f"<b>Đối tượng:</b> {ui_vehicle_name}<br>"
-            f"<b>Thời gian:</b> {time_str}<br>"  # <--- Dùng time_str đã format
-            f"<b>Camera:</b> {record_data.get('camera_name')}"
+            f"<b>Thời gian:</b> {time_str}<br>" 
+            f"<b>Camera:</b> {record_data.get('ten_camera')}"
         )
         self.lbl_details.setText(info_text)
 
-
-        # 2. Dọn dẹp rác cũ
+        # ======================================================
+        # 2. XỬ LÝ LOAD ẢNH VÀ VIDEO TỪ Ổ CỨNG
+        # ======================================================
         self.image_files.clear()
         self._stop_video()
         self.video_path = ""
         self.lbl_image_display.setText("Đang tải ảnh...")
         self.lbl_video_display.setText("Chưa tải video")
 
-        # 3. Quét thư mục tìm Ảnh và Video
         if self.current_folder and os.path.exists(self.current_folder):
             for file in sorted(os.listdir(self.current_folder)):
                 ext = file.lower()
@@ -247,7 +246,6 @@ class EvidenceViewer(QWidget):
                 elif ext.endswith(('.mp4', '.avi')):
                     self.video_path = filepath
                     
-            # Hiển thị ảnh đầu tiên
             if self.image_files:
                 self.current_img_idx = 0
                 self._show_current_image()
@@ -255,23 +253,22 @@ class EvidenceViewer(QWidget):
                 self.lbl_image_display.setText("Không tìm thấy ảnh bằng chứng.")
                 self.lbl_img_counter.setText("0 / 0")
                 
-            # Mở sắn Video nếu có
             if self.video_path:
                 self.cap = cv2.VideoCapture(self.video_path)
-                self._next_video_frame() # Chụp 1 khung hình hiển thị tĩnh
+                self._next_video_frame() 
         else:
-            self.lbl_image_display.setText("Thư mục bằng chứng không tồn tại.")
+            self.lbl_image_display.setText("Thư mục bằng chứng không tồn tại hoặc đã bị xóa.")
 
-        # Tự động nhảy về Tab Ảnh
+        # Ép UI nhảy về Tab Hình ảnh
         self.btn_tab_img.setChecked(True)
         self.stacked_widget.setCurrentIndex(0)
 
-    # --- LOGIC XỬ LÝ ẢNH ---
+
+    # --- CÁC HÀM XỬ LÝ ẢNH/VIDEO GIỮ NGUYÊN (Không ảnh hưởng Database) ---
     def _change_image(self, direction: int):
         if not self.image_files: return
         self.current_img_idx += direction
         
-        # Kéo xoay vòng (Loop)
         if self.current_img_idx >= len(self.image_files): self.current_img_idx = 0
         elif self.current_img_idx < 0: self.current_img_idx = len(self.image_files) - 1
         
@@ -281,17 +278,14 @@ class EvidenceViewer(QWidget):
         filepath = self.image_files[self.current_img_idx]
         pixmap = QPixmap(filepath)
         
-        # Lấy kích thước hiện tại của Label để co giãn ảnh cho vừa, giữ đúng tỷ lệ
         label_size = self.lbl_image_display.size()
         scaled_pixmap = pixmap.scaled(label_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         
         self.lbl_image_display.setPixmap(scaled_pixmap)
         self.lbl_img_counter.setText(f"{self.current_img_idx + 1} / {len(self.image_files)}")
 
-    # --- LOGIC XỬ LÝ VIDEO BẰNG QTIMER ---
     def _toggle_video(self):
         if not self.cap or not self.cap.isOpened():
-            # Nếu chạy hết rồi thì mở lại từ đầu
             if self.video_path:
                 self.cap = cv2.VideoCapture(self.video_path)
             else: return
@@ -320,7 +314,7 @@ class EvidenceViewer(QWidget):
                 label_size = self.lbl_video_display.size()
                 self.lbl_video_display.setPixmap(pixmap.scaled(label_size, Qt.AspectRatioMode.KeepAspectRatio))
             else:
-                self._stop_video() # Hết video
+                self._stop_video() 
                 self.lbl_video_display.setText("Video đã kết thúc.")
 
     def _stop_video(self):
@@ -333,13 +327,10 @@ class EvidenceViewer(QWidget):
         self.btn_play_pause.setStyleSheet("background-color: #f39c12; color: #111;")
 
     def _on_tab_changed(self, index: int):
-        if index == 0: # Đổi sang tab Ảnh -> Tắt video đang chạy
+        if index == 0: 
             self._stop_video()
             
     def resizeEvent(self, event):
-        """Giữ ảnh khỏi vỡ khi user kéo to nhỏ cửa sổ ứng dụng"""
         super().resizeEvent(event)
         if self.image_files and self.stacked_widget.currentIndex() == 0:
             self._show_current_image()
-
-    

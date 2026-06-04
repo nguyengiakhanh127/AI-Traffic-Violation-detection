@@ -30,3 +30,8 @@ class TrafficZoneType(Enum):
     NO_PARKING = auto()               
     FORBIDDEN_AREA = auto()         
 
+class TrafficLightColor(Enum):
+    RED = auto()
+    YELLOW = auto()
+    GREEN = auto()
+    OFF = auto()

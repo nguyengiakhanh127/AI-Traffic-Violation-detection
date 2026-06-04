@@ -64,31 +64,49 @@ class ZoneConfigWidget(BaseConfigCard):
         self.combo_ref.reference_cleared.connect(app_broker.clear_highlight_polygon.emit)
         self.combo_ref.currentIndexChanged.connect(self._on_combo_index_changed)
 
-        self.btn_draw = QPushButton()
-        self.btn_draw.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
-        self.btn_draw.setFixedSize(26, 26)
-        self.btn_draw.setStyleSheet("background-color: #4CAF50; font-weight: bold; border-radius: 3px;")
-        self.btn_draw.clicked.connect(self._on_draw_clicked)
+        self.btn_action = QPushButton()
+        self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
+        self.btn_action.setFixedSize(26, 26)
+        self.btn_action.setStyleSheet("background-color: #007acc; font-weight: bold; border-radius: 3px;")
+        self.btn_action.clicked.connect(self._on_action_clicked)
         
         edges_layout.addWidget(self.lbl_edges_count)
         edges_layout.addStretch()
         edges_layout.addWidget(self.combo_ref)
-        edges_layout.addWidget(self.btn_draw)
+        edges_layout.addWidget(self.btn_action)
         self.content_layout.addLayout(edges_layout)
 
     def update_registry_list(self, registry_data: dict):
         self.combo_ref.update_registry(registry_data)
     
-    def _on_draw_clicked(self):
-        self.lbl_edges_count.setText("Đang vẽ...")
-        self.btn_draw.setStyleSheet("background-color: #5cb85c; font-weight: bold;")
-        # [CẬP NHẬT]: Phát sóng
-        app_broker.request_draw_polygon.emit(self)
+    def _on_action_clicked(self):
+        """Hàm xử lý hành động kép (Vẽ hoặc Xóa)"""
+        # Nếu đang trống -> Ra lệnh vẽ
+        if not self.current_obj_id or self.current_obj_id == "Trống":
+            self.lbl_edges_count.setText("Đang vẽ...")
+            self.btn_action.setStyleSheet("background-color: #5cb85c; font-weight: bold; border-radius: 3px;")
+            app_broker.request_draw_polygon.emit(self)
+        
+        # Nếu đã có Hình -> Ra lệnh tiêu diệt hình đó
+        else:
+            # Phát tín hiệu lên Broker yêu cầu xóa ID đồ họa này
+            app_broker.request_delete_entity.emit(self.current_obj_id)
+            
+            # Gỡ bỏ liên kết trên UI
+            self.current_obj_id = None
+            self.combo_ref.setCurrentIndex(0) # Trả về "Trống"
+            self._clear_sub_edges()
+            
+            # Phục hồi giao diện nút bấm thành dấu [+] Xanh lơ
+            self.lbl_edges_count.setText("Trạng thái: Trống")
+            self.lbl_edges_count.setStyleSheet("color: #d4a017;")
+            self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
+            self.btn_action.setStyleSheet("font-weight: bold; border-radius: 3px;")
 
     def _on_combo_index_changed(self, index: int):
         selected_text = self.combo_ref.itemText(index)
         if selected_text and selected_text != "Trống":
             self.current_obj_id = selected_text
-            self.btn_draw.setStyleSheet("background-color: #4CAF50; font-weight: bold;")
-            self.lbl_edges_count.setText("Chọn đối tượng")
+            self.btn_action.setStyleSheet("background-color: #4CAF50; font-weight: bold;")
+            self.lbl_edges_count.setText("Đã tham chiếu")
             self.lbl_edges_count.setStyleSheet("color: #5cb85c;")

@@ -45,16 +45,16 @@ class LaneConfigWidget(BaseConfigCard):
         self.combo_ref.reference_cleared.connect(app_broker.clear_highlight_polygon.emit)
         self.combo_ref.currentIndexChanged.connect(self._on_combo_index_changed)
 
-        self.btn_draw = QPushButton()
-        self.btn_draw.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
-        self.btn_draw.setFixedSize(26, 26)
-        self.btn_draw.setStyleSheet("background-color: #007acc; font-weight: bold; border-radius: 3px;")
-        self.btn_draw.clicked.connect(self._on_draw_clicked)
-        
+        self.btn_action = QPushButton()
+        self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
+        self.btn_action.setFixedSize(26, 26)
+        self.btn_action.setStyleSheet("background-color: #007acc; font-weight: bold; border-radius: 3px;")
+        self.btn_action.clicked.connect(self._on_action_clicked)
+
         edges_layout.addWidget(self.lbl_edges_count)
         edges_layout.addStretch()
         edges_layout.addWidget(self.combo_ref)
-        edges_layout.addWidget(self.btn_draw)
+        edges_layout.addWidget(self.btn_action)
         self.content_layout.addLayout(edges_layout)
 
         self.sub_edges_container = QWidget()
@@ -64,21 +64,44 @@ class LaneConfigWidget(BaseConfigCard):
         self.sub_edges_container.hide() 
         self.content_layout.addWidget(self.sub_edges_container)
 
-    def _on_draw_clicked(self):
-        self.lbl_edges_count.setText("Đang vẽ...")
-        self.btn_draw.setStyleSheet("background-color: #5cb85c; font-weight: bold;")
-        self._clear_sub_edges()
-        # [CẬP NHẬT]: Phát sóng yêu cầu vẽ
-        app_broker.request_draw_polygon.emit(self)
+    def _on_action_clicked(self):
+        """Hàm xử lý hành động kép (Vẽ hoặc Xóa)"""
+        # Nếu đang trống -> Ra lệnh vẽ
+        if not self.current_obj_id or self.current_obj_id == "Trống":
+            self.lbl_edges_count.setText("Đang vẽ...")
+            self.btn_action.setStyleSheet("background-color: #5cb85c; font-weight: bold; border-radius: 3px;")
+            self._clear_sub_edges()
+            app_broker.request_draw_polygon.emit(self)
+        
+        # Nếu đã có Hình -> Ra lệnh tiêu diệt hình đó
+        else:
+            # Phát tín hiệu lên Broker yêu cầu xóa ID đồ họa này
+            app_broker.request_delete_entity.emit(self.current_obj_id)
+            
+            # Gỡ bỏ liên kết trên UI
+            self.current_obj_id = None
+            self.combo_ref.setCurrentIndex(0) # Trả về "Trống"
+            self._clear_sub_edges()
+            
+            # Phục hồi giao diện nút bấm thành dấu [+] Xanh lơ
+            self.lbl_edges_count.setText("Trạng thái: Trống")
+            self.lbl_edges_count.setStyleSheet("color: #d4a017;")
+            self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
+            self.btn_action.setStyleSheet("background-color: #007acc; font-weight: bold; border-radius: 3px;")
+
 
     def _on_combo_index_changed(self, index: int):
+        """Khi Dropdown đổi trạng thái (do vẽ xong hoặc tự chọn)"""
         selected_text = self.combo_ref.itemText(index)
-        if selected_text and selected_text != "Trống":
+        
+        if selected_text and selected_text not in ["Trống", "✏ Tạo thủ công (Draw New)"]:
             self.current_obj_id = selected_text
-            self.btn_draw.setStyleSheet("background-color: #007acc; font-weight: bold;")
-            # [CẬP NHẬT]: Phát sóng lấy số lượng cạnh
+            
+            # Biến hình thành NÚT THÙNG RÁC MÀU ĐỎ
+            self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "delete.png")))
+            self.btn_action.setStyleSheet("font-weight: bold; border-radius: 3px;")
+            
             app_broker.request_edge_count.emit(self, selected_text)
-
     def update_registry_list(self, registry_data: dict):
         self.combo_ref.update_registry(registry_data)
         self.combo_rule_ref.update_registry(registry_data)
@@ -92,7 +115,7 @@ class LaneConfigWidget(BaseConfigCard):
 
     def build_sub_edges_ui(self, edge_count: int):
         self._clear_sub_edges()
-        self.lbl_edges_count.setText(f"Đã Link ({edge_count} cạnh)")
+        self.lbl_edges_count.setText("Đã tham chiếu: ")
         self.lbl_edges_count.setStyleSheet("color: #5cb85c;")
         
         self.sub_edge_combos = []
@@ -101,7 +124,7 @@ class LaneConfigWidget(BaseConfigCard):
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(5, 2, 5, 2)
             
-            lbl_edge = QLabel(f"Edge {i+1}:")
+            lbl_edge = QLabel(f"Cạnh {i+1}:")
             lbl_edge.setFixedWidth(50)
             
             combo_type = QComboBox()
