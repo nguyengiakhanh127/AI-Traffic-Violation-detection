@@ -1,0 +1,11 @@
+{
+    "camera_name": "CAMERA NGUYỄN GIA TRÍ",
+    "vehicle_id": 52,
+    "vehicle_type": "CAR",
+    "license_plate": "UNKNOWN",
+    "violation_time": "05/06/2026 11:09:59",
+    "violation_error": {
+        "code": "DE_VACH_PHAN_LAN",
+        "description": "Không chấp hành hiệu lệnh, chỉ dẫn của vạch kẻ đường"
+    }
+}

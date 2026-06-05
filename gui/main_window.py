@@ -11,20 +11,18 @@ if project_root not in sys.path:
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QStackedWidget, QLabel, QButtonGroup
+    QPushButton, QStackedWidget, QLabel, QButtonGroup, QMessageBox
 )
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QCursor
+from PyQt6.QtGui import QIcon, QCursor, QCloseEvent
 
 # Import UI Components chung
 from gui.shared_components.collapsible_sidebar import CollapsibleSidebar
 from gui.shared_components.custom_titlebar import CustomTitleBar
-from utils import paths  # [CẬP NHẬT]: Dùng file paths.py của bạn cho chuyên nghiệp
+from utils import paths
 
-# Import Tab 2: Config Builder
+# Import các Tab
 from gui.features.config_builder.builder_view import ConfigBuilderView
-
-# [CẬP NHẬT LỚN]: Import Database và Tab 3 (Reviewer)
 from infrastructure.database_service import DatabaseService
 from gui.features.violation_reviewer.reviewer_view import ReviewerView
 from gui.features.violation_reviewer.reviewer_controller import ReviewerController
@@ -39,10 +37,14 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
+        # Khởi tạo Database Facade (Sử dụng Connection Pool)
         self.db_service = DatabaseService(port=3306)
 
         self._setup_ui()
         self._load_stylesheet()
+        
+        # Uncomment dòng dưới nếu muốn tự động tạo dữ liệu mẫu khi DB trống
+        # self._seed_fake_data()
 
     def _setup_ui(self):
         self.central_widget = QWidget()
@@ -72,7 +74,6 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(0, 20, 0, 0)
         sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Tạo Group để quản lý 3 nút (Đảm bảo chỉ 1 nút sáng lên lúc click)
         self.tab_group = QButtonGroup(self)
 
         # TAB 1: Live Monitor
@@ -84,12 +85,10 @@ class MainWindow(QMainWindow):
         self.btn_tab_config = self._create_sidebar_btn("   Experiment Tool", "settings.png")
         self.tab_group.addButton(self.btn_tab_config, 1)
 
-        # [CẬP NHẬT]: TAB 3: Violation Reviewer (Kiểm duyệt)
-        # Giả định bạn có 1 icon tên là 'document.png' hoặc 'history.png' trong assets
+        # TAB 3: Violation Reviewer (Kiểm duyệt)
         self.btn_tab_review = self._create_sidebar_btn("   Violation Review", "review.png") 
         self.tab_group.addButton(self.btn_tab_review, 2)
 
-        # Thêm nút vào Sidebar
         sidebar_layout.addWidget(self.btn_tab_live)
         sidebar_layout.addWidget(self.btn_tab_config)
         sidebar_layout.addWidget(self.btn_tab_review)
@@ -97,14 +96,10 @@ class MainWindow(QMainWindow):
         self.body_layout.addWidget(self.sidebar_widget)
 
     def _create_sidebar_btn(self, text: str, icon_name: str) -> QPushButton:
-        """Hàm hỗ trợ tạo nút Sidebar cho code gọn gàng"""
         btn = QPushButton(text)
         icon_path = os.path.join(paths.ICONS_DIR, icon_name)
-        
-        # Nếu chưa có icon thì xài đỡ icon mặc định, tránh bị crash
         if os.path.exists(icon_path):
             btn.setIcon(QIcon(icon_path))
-            
         btn.setIconSize(QSize(22, 22))
         btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         btn.setCheckable(True)
@@ -120,21 +115,16 @@ class MainWindow(QMainWindow):
         
         # --- TAB 1: Experiment Tool (Config Builder) ---
         self.page_config = ConfigBuilderView(self.db_service)
-
-        # Nối dây sự kiện Fullscreen (Focus Mode)
         self.page_config.get_toolbar().toggle_fullscreen.connect(self._toggle_fullscreen)
 
         # --- TAB 2: Violation Reviewer (KIỂM DUYỆT) ---
         self.page_reviewer = ReviewerView()
-        # Khởi tạo Controller điều phối màn hình này và giao DB cho nó
         self.reviewer_controller = ReviewerController(self.page_reviewer, self.db_service)
 
-        # Thêm 3 trang vào StackedWidget
         self.stacked_workspace.addWidget(self.page_live)
         self.stacked_workspace.addWidget(self.page_config)
         self.stacked_workspace.addWidget(self.page_reviewer)
 
-        # Nối dây chuyển tab khi bấm nút ở Sidebar
         self.tab_group.idToggled.connect(self._change_tab)
         
         self.body_layout.addWidget(self.stacked_workspace, stretch=1)
@@ -144,7 +134,6 @@ class MainWindow(QMainWindow):
             self.stacked_workspace.setCurrentIndex(tab_id)
 
     def _toggle_fullscreen(self):
-        """Chế độ Tập trung (Focus Mode) dành riêng cho lúc Vẽ cấu hình"""
         self.is_focus_mode = getattr(self, 'is_focus_mode', False)
         
         if not self.is_focus_mode:
@@ -167,21 +156,20 @@ class MainWindow(QMainWindow):
                 self.setStyleSheet(f.read())
         except Exception as e:
             print(f"Warning: Không thể tải CSS: {e}")
+
     def _seed_fake_data(self):
-        """Bơm dữ liệu giả vào DB (Đã cập nhật theo cấu trúc Khóa Ngoại)"""
-        if self.db_service.get_total_count() > 0:
+        """[VÁ LỖI]: Bơm dữ liệu giả vào DB sử dụng API chuẩn của Repositories"""
+        if self.db_service.violations.get_total_count() > 0:
             return 
             
         print("Đang tạo Camera và 50 dữ liệu vi phạm giả...")
         import random
         from datetime import datetime, timedelta
 
-        # 1. TẠO CAMERA GIẢ TRƯỚC VÀ LẤY ID
-        cam1_id = self.db_service.add_camera("CAM_TEST_NGA_TU_A", "Nguyễn Trãi", "Khuất Duy Tiến")
-        cam2_id = self.db_service.add_camera("CAM_TEST_CAO_TOC", "Cao Tốc NB-LC", "Nút giao 23")
-        camera_ids = [cam1_id, cam2_id] # Danh sách các ID hợp lệ để random
+        cam1_id = self.db_service.cameras.add("CAM_TEST_NGA_TU_A", "Nguyễn Trãi", "Khuất Duy Tiến")
+        cam2_id = self.db_service.cameras.add("CAM_TEST_CAO_TOC", "Cao Tốc NB-LC", "Nút giao 23")
+        camera_ids = [cam1_id, cam2_id] 
 
-        # 2. TẠO VI PHẠM GIẢ GHÉP VỚI CAMERA_ID
         errors = ["DI_SAI_LAN", "DI_NGUOC_CHIEU", "DE_VACH_PHAN_LAN", "VUOT_DEN_DO"]
         vehicles = ["CAR", "MOTORCYCLE", "TRUCK", "BUS"]
         lanes = ["Làn 1", "Làn 2", "Làn 3"]
@@ -191,22 +179,74 @@ class MainWindow(QMainWindow):
         for i in range(50):
             random_time = now - timedelta(hours=random.randint(0, 48), minutes=random.randint(0, 60))
             
-            fake_data = {
-                "camera_id": random.choice(camera_ids), # [QUAN TRỌNG]: Giờ là ID, không phải Name
-                "timestamp": random_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "violation_code": random.choice(errors),
-                "vehicle_type": random.choice(vehicles),
-                "lane_id": random.choice(lanes),
-                "license_plate": f"{random.randint(11, 99)}{random.choice(['A','B','C','D'])}-{random.randint(10000, 99999)}",
-                "evidence_path": "" 
-            }
-            self.db_service.insert_violation(fake_data)
-            
-        print("✅ Bơm dữ liệu giả thành công!")
+            self.db_service.violations.insert(
+                camera_id=random.choice(camera_ids),
+                thoi_gian=random_time.strftime("%Y-%m-%d %H:%M:%S"),
+                ma_loi=random.choice(errors),
+                loai_xe=random.choice(vehicles),
+                lan_duong=random.choice(lanes),
+                bien_so=f"{random.randint(11, 99)}{random.choice(['A','B','C','D'])}-{random.randint(10000, 99999)}",
+                duong_dan=""
+            )
             
         print("✅ Bơm dữ liệu giả thành công! Hãy mở Tab Reviewer lên xem.")
+
+    # =========================================================================
+    # QUẢN LÝ VÒNG ĐỜI ỨNG DỤNG (GRACEFUL SHUTDOWN)
+    # =========================================================================
+    def closeEvent(self, event: QCloseEvent):
+        """
+        Bắt sự kiện khi người dùng bấm dấu X hoặc ấn tắt phần mềm.
+        Đảm bảo dọn dẹp các Thread ngầm và lưu nốt bằng chứng xuống đĩa.
+        """
+        # Nếu AI đang chạy, cảnh báo người dùng
+        if hasattr(self.page_config, 'controller'):
+            video_thread = self.page_config.controller.video_thread
+            if video_thread and video_thread.is_playing:
+                reply = QMessageBox.question(
+                    self, 'Cảnh báo',
+                    "Hệ thống AI đang giám sát. Bạn có chắc chắn muốn thoát?\n"
+                    "Quá trình này có thể mất vài giây để lưu nốt các vi phạm cuối cùng.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    self._shutdown_services(video_thread)
+                    event.accept()
+                else:
+                    event.ignore()
+                return
+
+        # Nếu AI không chạy, chỉ cần tắt dịch vụ
+        self._shutdown_services(None)
+        event.accept()
+
+    def _shutdown_services(self, video_thread):
+        print("Đang tiến hành dọn dẹp hệ thống trước khi thoát...")
+        
+        # 1. Tắt AI Thread (nếu có)
+        if video_thread:
+            video_thread.stop()
+            video_thread.wait() # Chờ AI Thread ngắt an toàn
+            
+        # 2. Tắt dịch vụ Video Export ngầm
+        if hasattr(self.page_config, 'controller'):
+            violation_service = self.page_config.controller.violation_service
+            if hasattr(violation_service, 'video_buffer'):
+                violation_service.video_buffer.clear()
+            
+            # Tắt dịch vụ Ghi ảnh ngầm
+            if hasattr(violation_service, 'evidence_generator'):
+                violation_service.evidence_generator.shutdown()
+                
+        print("✅ Ứng dụng đã được đóng an toàn.")
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
+# --- END OF FILE gui/main_window.py ---

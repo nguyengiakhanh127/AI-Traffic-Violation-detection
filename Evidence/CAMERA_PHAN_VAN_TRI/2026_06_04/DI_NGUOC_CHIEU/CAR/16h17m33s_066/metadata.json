@@ -1,0 +1,11 @@
+{
+    "camera_name": "CAMERA_PHAN_VAN_TRI",
+    "vehicle_id": 56,
+    "vehicle_type": "CAR",
+    "license_plate": "UNKNOWN",
+    "violation_time": "04/06/2026 16:17:33",
+    "violation_error": {
+        "code": "DI_NGUOC_CHIEU",
+        "description": "Đi ngược chiều của đường một chiều hoặc đường có biển cấm"
+    }
+}

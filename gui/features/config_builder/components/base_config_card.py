@@ -1,6 +1,6 @@
 # --- START OF FILE gui/features/config_builder/components/base_config_card.py ---
 import os
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFormLayout, QLineEdit
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap, QIcon
 
@@ -8,10 +8,16 @@ class BaseConfigCard(QFrame):
     """
     Lớp cơ sở định nghĩa UI chung (Header, Title, Nút xóa) cho các Thẻ Cấu hình.
     """
-    # Chỉ giữ lại tín hiệu xóa UI cục bộ (Panel sẽ hứng tín hiệu này để gỡ Widget)
     request_delete = pyqtSignal(object)
 
-    def __init__(self, title: str, icon_name: str, bg_color: str, parent=None):
+    _counters = {} 
+
+    @classmethod
+    def reset_counters(cls):
+        """Hàm reset toàn bộ ID về 1"""
+        cls._counters.clear()
+
+    def __init__(self, title: str, icon_name: str, bg_color: str, id_prefix: str, parent=None):
         super().__init__(parent)
         self.setObjectName("ConfigCard")
         
@@ -29,6 +35,11 @@ class BaseConfigCard(QFrame):
                 font-weight: bold
             }}
         """)
+
+        count = self._counters.get(id_prefix, 1)
+        self.auto_id = f"{id_prefix} {count:02d}"
+        self._counters[id_prefix] = count + 1
+
         self._setup_base_ui(title, icon_name)
 
     def _setup_base_ui(self, title: str, icon_name: str):
@@ -64,4 +75,13 @@ class BaseConfigCard(QFrame):
         self.content_layout = QVBoxLayout()
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(8)
+
+        self.id_layout = QFormLayout()
+        self.id_layout.setContentsMargins(0, 5, 0, 0)
+        self.input_id = QLineEdit(self.auto_id)
+        self.input_id.setReadOnly(True)
+        self.input_id.setStyleSheet("background-color: #333333; color: #aaaaaa; border: 1px solid #444; padding: 4px;")
+        self.id_layout.addRow("ID: ", self.input_id)
+
+        self.content_layout.addLayout(self.id_layout)
         self.main_layout.addLayout(self.content_layout)

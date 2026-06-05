@@ -1,20 +1,21 @@
 from enum import Enum, auto
 
 class TrafficVehicleType(Enum):
-    BICYCLE = auto()
-    MOTORCYCLE = auto()
-    CAR = auto()         
-    BUS = auto()         
-    TRUCK = auto()       
-    CONTAINER = auto()   
-    SPECIAL = auto()     
-    UNKNOWN = auto()
+    BICYCLE = "Xe đạp"
+    MOTORCYCLE = "Xe máy"
+    CAR = "Ô tô con"         
+    BUS = "Xe buýt"         
+    TRUCK = "Xe tải"       
+    CONTAINER = "Xe Container"   
+    SPECIAL = "Xe ưu tiên"     
+    UNKNOWN = "Không xác định"
 
 class TrafficLineType(Enum):
-    SOLID = "Solid"     
-    DASHED = "Dashed"   
-    ENTRY = "Entry"     
-    EXIT = "Exit"      
+    SOLID = "Nét liền"      
+    DASHED = "Nét đứt"      
+    ENTRY = "Hướng vào"    
+    EXIT = "Hướng ra"       
+    BOUNDARY = "Biên làn"    
 
 class ViolationType(Enum):
     WRONG_LANE = auto()                
@@ -26,9 +27,9 @@ class ViolationType(Enum):
     RED_LINE = auto()
 
 class TrafficZoneType(Enum):
-    PEDESTRIAN_CROSSING = auto()     
-    NO_PARKING = auto()               
-    FORBIDDEN_AREA = auto()         
+    PEDESTRIAN_CROSSING = "Vạch đi bộ"     
+    NO_PARKING = "Vùng cấm dừng đỗ"               
+    FORBIDDEN_AREA = "Khu vực cấm đi vào"
 
 class TrafficLightColor(Enum):
     RED = auto()

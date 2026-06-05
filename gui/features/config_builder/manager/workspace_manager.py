@@ -3,6 +3,10 @@ from PyQt6.QtCore import QObject, pyqtSlot
 from PyQt6.QtWidgets import QMessageBox
 from gui.shared_components.event_broker import app_broker
 
+import uuid
+from PyQt6.QtCore import QRectF
+from gui.features.config_builder.graphics_items.smart_shapes import NodeItem, EdgeItem, PolygonEntity, LineEntity, BboxEntity
+
 class WorkspaceManager(QObject):
     """
     Quản lý bộ nhớ (Registry) của các đối tượng đồ họa đang được vẽ trên Canvas.
@@ -45,6 +49,8 @@ class WorkspaceManager(QObject):
 
         app_broker.request_delete_entity.connect(self.handle_delete_entity_request)
 
+        app_broker.request_toggle_rois_visibility.connect(self.handle_toggle_rois_visibility)
+
     def _wire_canvas_signals(self):
         """Lắng nghe tín hiệu khi Canvas vẽ xong hoặc xóa đồ họa"""
         self.canvas.polygon_completed.connect(self.handle_new_polygon)
@@ -63,35 +69,33 @@ class WorkspaceManager(QObject):
 
     @pyqtSlot()
     def reset_workspace(self):
-        """Dọn dẹp toàn bộ dữ liệu vẽ tay và trả Canvas về trạng thái chờ"""
+        """Dọn dẹp toàn bộ dữ liệu an toàn"""
         reply = QMessageBox.question(
             self.canvas, 'Xác nhận', 
-            'Bạn có chắc chắn muốn làm mới toàn bộ không gian làm việc?\n(Bao gồm cả ảnh/video và các thẻ cấu hình)',
+            'Làm mới toàn bộ không gian làm việc?',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
             QMessageBox.StandardButton.No
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            # 1. Xóa rác đồ họa
             self.drawn_objects.clear()
+            
+            # [VÁ LỖI]: Ép Canvas hủy bỏ hoàn toàn trạng thái vẽ hiện tại của Tool
             self.canvas._cancel_drawing()
+            if self.canvas.active_tool:
+                self.canvas.set_mode("NONE")
             
-            # 2. XÓA TOÀN BỘ CÁC ITEM TRÊN SCENE (Bao gồm cả ảnh nền)
             self.canvas.scene.clear()
-            self.canvas.image_item = None # [QUAN TRỌNG]: Gán bằng None để Canvas bật lại drawForeground
-            self.canvas.viewport().update() # Ép Canvas vẽ lại ngay lập tức
+            self.canvas.image_item = None 
+            self.canvas.viewport().update() 
             
-            # 3. Xóa sổ sách
             self.canvas.all_nodes.clear()
             self.object_registry = {"POLYGONS": {}, "BBOXES": {}, "LINES": {}, "RULES": {}}
             
-            # 4. Xóa UI bên phải (Right Panel)
             if hasattr(self.panel, 'reset_form'):
                 self.panel.reset_form()
                 
             self.broadcast_registry()
-            
-            # Bắn tín hiệu trả về True để Controller biết mà tắt Video (nếu đang chạy)
             return True
         return False
 
@@ -209,48 +213,147 @@ class WorkspaceManager(QObject):
             if entity_id in obj_dict:
                 entity = obj_dict[entity_id]
                 
-                # 1. XÓA ĐA GIÁC (An toàn tuyệt đối)
                 if category == "POLYGONS":
-                    # Bước A: Tháo gỡ và xóa tất cả các CẠNH của Đa giác này
                     for edge in entity.edges:
-                        # Rút cạnh này ra khỏi danh sách kết nối của 2 đỉnh đầu mút của nó
                         edge.start_node.remove_edge(edge)
                         edge.end_node.remove_edge(edge)
-                        # Rút khỏi màn hình
-                        self.canvas.scene.removeItem(edge)
+                        if edge.scene() == self.canvas.scene:
+                            self.canvas.scene.removeItem(edge)
                         
-                    # Bước B: Phán xét sự sống chết của các ĐỈNH
                     for node in entity.nodes:
-                        # Nếu Đỉnh này không còn kết nối với Cạnh nào khác (không ai dùng chung)
                         if len(node.connected_edges) == 0:
-                            self.canvas.scene.removeItem(node)
                             if node in self.canvas.all_nodes: 
                                 self.canvas.all_nodes.remove(node)
-                        else:
-                            # Đỉnh này đang được Đa giác khác dùng chung -> ĐỂ YÊN ĐÓ!
-                            pass 
+                            # [VÁ LỖI]: Kiểm tra xem node có thực sự nằm trên scene không trước khi xóa
+                            if node.scene() == self.canvas.scene:
+                                self.canvas.scene.removeItem(node)
                             
-                    # Bước C: Xóa lớp màng màu (Fill)
-                    self.canvas.scene.removeItem(entity)
+                    if entity.scene() == self.canvas.scene:
+                        self.canvas.scene.removeItem(entity)
 
-                # 2. XÓA ĐƯỜNG THẲNG (Cũng dùng chung logic bảo vệ Đỉnh)
                 elif category == "LINES":
                     entity.start_node.remove_edge(entity)
                     entity.end_node.remove_edge(entity)
                     
-                    self.canvas.scene.removeItem(entity)
+                    if entity.scene() == self.canvas.scene:
+                        self.canvas.scene.removeItem(entity)
                     
                     for node in [entity.start_node, entity.end_node]:
                         if len(node.connected_edges) == 0:
-                            self.canvas.scene.removeItem(node)
                             if node in self.canvas.all_nodes: 
                                 self.canvas.all_nodes.remove(node)
+                            if node.scene() == self.canvas.scene:
+                                self.canvas.scene.removeItem(node)
 
-                # 3. XÓA HỘP BBOX
                 elif category == "BBOXES":
-                    self.canvas.scene.removeItem(entity)
+                    if entity.scene() == self.canvas.scene:
+                        self.canvas.scene.removeItem(entity)
 
-                # 4. Xóa sổ sách
                 del obj_dict[entity_id]
                 self.broadcast_registry()
                 break
+
+    @pyqtSlot(bool)
+    def handle_toggle_rois_visibility(self, is_visible: bool):
+        # Duyệt qua các ngân hàng đồ họa (Loại trừ "RULES")
+        for category in ["POLYGONS", "BBOXES", "LINES"]:
+            for entity in self.object_registry[category].values():
+                
+                # 1. Ẩn/hiện đối tượng gốc (Mảng màu Polygon, Box, v.v.)
+                if hasattr(entity, 'setVisible'):
+                    entity.setVisible(is_visible)
+                
+                # 2. [VÁ LỖI]: Ép ẩn/hiện Đích danh các CẠNH của Polygon
+                if category == "POLYGONS" and hasattr(entity, 'edges'):
+                    for edge in entity.edges:
+                        if hasattr(edge, 'setVisible'):
+                            edge.setVisible(is_visible)
+
+        # 3. Ẩn/hiện các Đỉnh (Nodes) dùng chung của Polygon và Line
+        for node in self.canvas.all_nodes:
+            if hasattr(node, 'setVisible'):
+                node.setVisible(is_visible)
+    
+    def silent_clear(self):
+        """Xóa sạch đồ họa và registry nhưng KHÔNG xóa nền Video (image_item)"""
+        # Gọi hàm xóa thực thể chuẩn để dọn dẹp sạch sẽ
+        for category in self.object_registry.values():
+            for entity_id in list(category.keys()):
+                self.handle_delete_entity_request(entity_id)
+                
+        self.object_registry = {"POLYGONS": {}, "BBOXES": {}, "LINES": {}, "RULES": {}}
+        self.canvas.all_nodes.clear()
+
+    def decompile_graphics(self, json_data: dict):
+        """Dịch ngược tọa độ JSON thành Đồ họa Vector trên Canvas"""
+        self.silent_clear()
+
+        # 1. TÁI TẠO ĐA GIÁC (Lanes & Zones)
+        for item in json_data.get("lanes", []) + json_data.get("zones", []):
+            poly_id = f"OBJ_{str(uuid.uuid4())[:8].upper()}"
+            nodes, edges = [], []
+            
+            # Lấy tọa độ (Lane dùng 'edges', Zone dùng 'vertices')
+            points = [e["p1"] for e in item.get("edges", [])] if "edges" in item else item.get("vertices", [])
+            if not points: continue
+
+            # Sinh Đỉnh (Nodes)
+            for pt in points:
+                node = NodeItem(pt[0], pt[1])
+                self.canvas.scene.addItem(node)
+                self.canvas.all_nodes.append(node)
+                nodes.append(node)
+
+            # Sinh Cạnh (Edges) nối vòng tròn
+            for i in range(len(nodes)):
+                n1, n2 = nodes[i], nodes[(i + 1) % len(nodes)]
+                edge = EdgeItem(n1, n2)
+                self.canvas.scene.addItem(edge)
+                n1.add_edge(edge); n2.add_edge(edge)
+                edges.append(edge)
+
+            # Sinh Đa giác mẹ
+            poly = PolygonEntity(nodes, edges, poly_id)
+            self.canvas.scene.addItem(poly)
+            for node in nodes: node.parent_polygon = poly
+            
+            self.object_registry["POLYGONS"][poly_id] = poly
+            item["_mapped_poly_id"] = poly_id # Lưu ID tạm để lát UI Card móc vào
+
+        # 2. TÁI TẠO ĐÈN GIAO THÔNG
+        for light in json_data.get("traffic_lights", []):
+            # Bbox
+            b = light.get("bbox")
+            if b and len(b) == 4:
+                bbox_id = f"LIGHT_{str(uuid.uuid4())[:8].upper()}"
+                
+                # [VÁ LỖI TỌA ĐỘ]: Chuyển (x1, y1, x2, y2) từ JSON về lại (x, y, width, height)
+                x = b[0]
+                y = b[1]
+                w = b[2] - b[0] # width = x2 - x1
+                h = b[3] - b[1] # height = y2 - y1
+                
+                bbox_entity = BboxEntity(QRectF(x, y, w, h), bbox_id)
+                self.canvas.scene.addItem(bbox_entity)
+                self.object_registry["BBOXES"][bbox_id] = bbox_entity
+                light["_mapped_bbox_id"] = bbox_id
+
+            # Helper tạo Line
+            def _create_line(data_pts, prefix="LINE"):
+                if not data_pts: return None
+                lid = f"{prefix}_{str(uuid.uuid4())[:8].upper()}"
+                n1, n2 = NodeItem(data_pts["p1"][0], data_pts["p1"][1]), NodeItem(data_pts["p2"][0], data_pts["p2"][1])
+                for n in [n1, n2]:
+                    self.canvas.scene.addItem(n)
+                    self.canvas.all_nodes.append(n)
+                line = LineEntity(n1, n2, lid)
+                self.canvas.scene.addItem(line)
+                n1.add_edge(line); n2.add_edge(line)
+                self.object_registry["LINES"][lid] = line
+                return lid
+
+            light["_mapped_stop_id"] = _create_line(light.get("stop_line"))
+            light["_mapped_right_id"] = _create_line(light.get("right_turn_line"))
+
+        # Phát sóng ID mới cho UI
+        self.broadcast_registry()

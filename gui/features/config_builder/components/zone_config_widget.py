@@ -12,23 +12,19 @@ import os
 
 class ZoneConfigWidget(BaseConfigCard):
     def __init__(self, parent=None):
-        super().__init__(title="Traffic Zone", icon_name="danger.png", bg_color="#2a2d2a", parent=parent)
+        super().__init__(title="Traffic Zone", icon_name="danger.png", bg_color="#2a2d2a", id_prefix="Vùng", parent=parent)
         self.current_obj_id = None
         self._setup_content_ui()
 
     def _setup_content_ui(self):
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 5, 0, 5)
-        
-        self.input_id = QLineEdit()
-        self.input_id.setPlaceholderText("EX: 01")
-        self.input_id.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444;")
-        form_layout.addRow("ID:", self.input_id)
 
         self.combo_type = QComboBox()
-        self.combo_type.addItems([e.name for e in TrafficZoneType])
+        for e in TrafficZoneType:
+            self.combo_type.addItem(e.value, userData=e.name) 
         self.combo_type.setStyleSheet("background-color: #333;")
-        form_layout.addRow("Type:", self.combo_type)
+        form_layout.addRow("Loại:", self.combo_type)
 
         hours_layout = QHBoxLayout()
         self.spin_start_hour = QSpinBox()
@@ -53,7 +49,7 @@ class ZoneConfigWidget(BaseConfigCard):
         self.content_layout.addLayout(form_layout)
 
         edges_layout = QHBoxLayout()
-        self.lbl_edges_count = QLabel("Status: Trống")
+        self.lbl_edges_count = QLabel("Trạng thái: ")
         self.lbl_edges_count.setStyleSheet("color: #d4a017;") 
         
         self.combo_ref = ReferenceComboBox(target_type="POLYGONS", allow_manual=False)
@@ -98,7 +94,7 @@ class ZoneConfigWidget(BaseConfigCard):
             self._clear_sub_edges()
             
             # Phục hồi giao diện nút bấm thành dấu [+] Xanh lơ
-            self.lbl_edges_count.setText("Trạng thái: Trống")
+            self.lbl_edges_count.setText("Trạng thái: ")
             self.lbl_edges_count.setStyleSheet("color: #d4a017;")
             self.btn_action.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
             self.btn_action.setStyleSheet("font-weight: bold; border-radius: 3px;")

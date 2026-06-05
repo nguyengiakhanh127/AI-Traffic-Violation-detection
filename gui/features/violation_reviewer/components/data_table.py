@@ -40,7 +40,7 @@ class DataTableWidget(QWidget):
         layout.addLayout(title_layout)
 
         self.table = QTableWidget()
-        headers = ["STT", "Thời gian phát hiện", "Loại cảnh báo", "Đối tượng", "Làn", "Biển số"]
+        headers = ["STT", "Thời gian", "Nguồn (Camera)", "Loại cảnh báo", "Đối tượng", "Làn", "Biển số"]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         
@@ -80,8 +80,7 @@ class DataTableWidget(QWidget):
             stt_item = QTableWidgetItem(str(row_idx + 1))
             stt_item.setData(Qt.ItemDataRole.UserRole, record) 
             
-            # --- [CẬP NHẬT KEY DB TIẾNG VIỆT] ---
-            raw_error_code = record.get('ma_loi_vi_pham', '') # Đổi từ violation_code
+            raw_error_code = record.get('ma_loi_vi_pham', '') 
             ui_error_name = raw_error_code 
             
             for v_type in ViolationType:
@@ -89,38 +88,38 @@ class DataTableWidget(QWidget):
                     ui_error_name = ViolationRegistry.get_name(v_type)
                     break
 
-            raw_time = record.get('thoi_gian_vi_pham', '') # Đổi từ timestamp
-            if isinstance(raw_time, datetime):
-                time_str = raw_time.strftime("%d/%m/%Y %H:%M:%S")
-            else:
-                time_str = str(raw_time) 
+            raw_time = record.get('thoi_gian_vi_pham', '') 
+            time_str = raw_time.strftime("%d/%m/%Y %H:%M:%S") if isinstance(raw_time, datetime) else str(raw_time)
 
-            raw_vehicle_type = record.get('loai_phuong_tien', '') # Đổi từ vehicle_type
-            ui_vehicle_name = raw_vehicle_type
-            try:
-                enum_vehicle = TrafficVehicleType[raw_vehicle_type]
-                ui_vehicle_name = VehicleRegistry.get_name(enum_vehicle)
-            except KeyError:
-                pass 
+            ui_vehicle_name = record.get('loai_phuong_tien', 'Không xác định')
+            self.table.setItem(row_idx, 4, QTableWidgetItem(ui_vehicle_name))
+
+            # [THÊM MỚI]: Lấy tên camera từ record
+            camera_name = record.get('ten_camera', 'Không xác định')
 
             self.table.setItem(row_idx, 0, stt_item)
             self.table.setItem(row_idx, 1, QTableWidgetItem(time_str))
-            self.table.setItem(row_idx, 2, QTableWidgetItem(ui_error_name))
-            self.table.setItem(row_idx, 3, QTableWidgetItem(ui_vehicle_name))
             
-            raw_lane = record.get('lan_duong', '') # Đổi từ lane_id
+            # [THÊM MỚI]: Cột Nguồn Camera
+            cam_item = QTableWidgetItem(camera_name)
+            cam_item.setForeground(QBrush(QColor("#a8dadc"))) # Màu xanh dương nhạt cho dễ phân biệt
+            self.table.setItem(row_idx, 2, cam_item)
+            
+            self.table.setItem(row_idx, 3, QTableWidgetItem(ui_error_name))
+            self.table.setItem(row_idx, 4, QTableWidgetItem(ui_vehicle_name))
+            
+            raw_lane = record.get('lan_duong', '') 
             ui_lane = raw_lane if (raw_lane and raw_lane != "Ngoài làn") else "-"
-
             lane_item = QTableWidgetItem(ui_lane)
             lane_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(row_idx, 4, lane_item)
+            self.table.setItem(row_idx, 5, lane_item)
 
-            plate_item = QTableWidgetItem(record.get('bien_so_xe', '')) # Đổi từ license_plate
+            plate_item = QTableWidgetItem(record.get('bien_so_xe', '')) 
             font = QFont()
             font.setBold(True)
             plate_item.setFont(font)
             plate_item.setForeground(QBrush(QColor("#f39c12"))) 
-            self.table.setItem(row_idx, 5, plate_item)
+            self.table.setItem(row_idx, 6, plate_item)
 
         self.table.blockSignals(False)
         self.lbl_page.setText(f"Trang {current_page} / {max(1, total_pages)}")
@@ -131,4 +130,4 @@ class DataTableWidget(QWidget):
         first_col_item = self.table.item(selected_items[0].row(), 0)
         record_data = first_col_item.data(Qt.ItemDataRole.UserRole)
         if record_data:
-            app_broker.violation_row_selected.emit(record_data)
+            app_broker.violation_row_selected.emit(record_data)     

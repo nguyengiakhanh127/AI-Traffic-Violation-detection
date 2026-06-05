@@ -1,0 +1,11 @@
+{
+    "camera_name": "CAMERA PHAN VĂN TRỊ",
+    "vehicle_id": 135,
+    "vehicle_type": "TRUCK",
+    "license_plate": "UNKNOWN",
+    "violation_time": "05/06/2026 18:09:36",
+    "violation_error": {
+        "code": "DE_VACH_PHAN_LAN",
+        "description": "Không chấp hành hiệu lệnh, chỉ dẫn của vạch kẻ đường"
+    }
+}

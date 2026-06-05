@@ -9,7 +9,7 @@ import os
 
 class LightConfigWidget(BaseConfigCard):
     def __init__(self, parent=None):
-        super().__init__(title="Traffic Light", icon_name="traffic_light.png", bg_color="#2d2626", parent=parent)
+        super().__init__(title="Traffic Light", icon_name="traffic_light.png", bg_color="#2d2626", id_prefix="Đèn ", parent=parent)
         self.current_bbox_id = None
         self.current_stop_id = None
         self.current_right_id = None
@@ -18,17 +18,14 @@ class LightConfigWidget(BaseConfigCard):
     def _setup_content_ui(self):
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 5, 0, 5)
-        self.input_id = QLineEdit()
-        self.input_id.setPlaceholderText("VD: 01")
-        self.input_id.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444; padding: 4px;")
-        form_layout.addRow("ID:", self.input_id)
+
         self.content_layout.addLayout(form_layout)
 
         # ==========================================
         # 1. HÀNG: BBOX (HỘP ĐÈN)
         # ==========================================
         bbox_layout = QHBoxLayout()
-        self.lbl_bbox_status = QLabel("Trống")
+        self.lbl_bbox_status = QLabel("")
         self.lbl_bbox_status.setStyleSheet("color: #d4a017;")
         
         self.combo_bbox = ReferenceComboBox(target_type="BBOXES", allow_manual=False)
@@ -42,7 +39,7 @@ class LightConfigWidget(BaseConfigCard):
         self.btn_action_bbox = self._create_action_button()
         self.btn_action_bbox.clicked.connect(lambda: self._on_action_clicked("BBOX"))
         
-        bbox_layout.addWidget(QLabel("BBox:"))
+        bbox_layout.addWidget(QLabel("Hộp giới hạn:"))
         bbox_layout.addWidget(self.lbl_bbox_status)
         bbox_layout.addStretch()
         bbox_layout.addWidget(self.combo_bbox)
@@ -55,7 +52,7 @@ class LightConfigWidget(BaseConfigCard):
         # 2. HÀNG: STOP LINE (VẠCH DỪNG)
         # ==========================================
         stop_layout = QHBoxLayout()
-        self.lbl_stop_status = QLabel("Trống")
+        self.lbl_stop_status = QLabel("")
         self.lbl_stop_status.setStyleSheet("color: #d4a017;")
         
         self.combo_stop = ReferenceComboBox(target_type="LINES", allow_manual=False)
@@ -69,7 +66,7 @@ class LightConfigWidget(BaseConfigCard):
         self.btn_action_stop = self._create_action_button()
         self.btn_action_stop.clicked.connect(lambda: self._on_action_clicked("STOP"))
         
-        stop_layout.addWidget(QLabel("Stop:"))
+        stop_layout.addWidget(QLabel("Vạch vào:"))
         stop_layout.addWidget(self.lbl_stop_status)
         stop_layout.addStretch()
         stop_layout.addWidget(self.combo_stop)
@@ -80,7 +77,7 @@ class LightConfigWidget(BaseConfigCard):
         # 3. HÀNG: RIGHT TURN LINE (VẠCH RẼ PHẢI - Tùy chọn)
         # ==========================================
         right_layout = QHBoxLayout()
-        self.lbl_right_status = QLabel("Trống")
+        self.lbl_right_status = QLabel("")
         self.lbl_right_status.setStyleSheet("color: #d4a017;")
         
         self.combo_right = ReferenceComboBox(target_type="LINES", allow_manual=False)
@@ -94,7 +91,7 @@ class LightConfigWidget(BaseConfigCard):
         self.btn_action_right = self._create_action_button()
         self.btn_action_right.clicked.connect(lambda: self._on_action_clicked("RIGHT"))
         
-        right_layout.addWidget(QLabel("Right:"))
+        right_layout.addWidget(QLabel("Vạch ra:"))
         right_layout.addWidget(self.lbl_right_status)
         right_layout.addStretch()
         right_layout.addWidget(self.combo_right)
@@ -158,7 +155,7 @@ class LightConfigWidget(BaseConfigCard):
                 self.combo_right.setCurrentIndex(0)
                 
             # Phục hồi giao diện nút bấm thành dấu [+] màu Đỏ nhạt
-            lbl.setText("Trống")
+            lbl.setText("")
             lbl.setStyleSheet("color: #d4a017;")
             btn.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "plus.png")))
             btn.setStyleSheet("background-color: #ff6b6b; font-weight: bold; border-radius: 3px;")
@@ -188,7 +185,7 @@ class LightConfigWidget(BaseConfigCard):
         text = self.combo_bbox.itemText(index)
         if text and text not in ["Trống", "✏ Tạo thủ công (Draw New)"]:
             self.current_bbox_id = text
-            self.lbl_bbox_status.setText("Đã tham chiếu")
+            self.lbl_bbox_status.setText("")
             self.lbl_bbox_status.setStyleSheet("color: #5cb85c;")
             self.btn_action_bbox.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "delete.png")))
             self.btn_action_bbox.setStyleSheet("#d9534f; font-weight: bold; border-radius: 3px;")
@@ -197,7 +194,7 @@ class LightConfigWidget(BaseConfigCard):
         text = self.combo_stop.itemText(index)
         if text and text not in ["Trống", "✏ Tạo thủ công (Draw New)"]:
             self.current_stop_id = text
-            self.lbl_stop_status.setText("Đã tham chiếu")
+            self.lbl_stop_status.setText("")
             self.lbl_stop_status.setStyleSheet("color: #5cb85c;")
             self.btn_action_stop.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "delete.png")))
             self.btn_action_stop.setStyleSheet("#d9534f; font-weight: bold; border-radius: 3px;")
@@ -206,7 +203,7 @@ class LightConfigWidget(BaseConfigCard):
         text = self.combo_right.itemText(index)
         if text and text not in ["Trống", "✏ Tạo thủ công (Draw New)"]:
             self.current_right_id = text
-            self.lbl_right_status.setText("Đã tham chiếu")
+            self.lbl_right_status.setText("")
             self.lbl_right_status.setStyleSheet("color: #5cb85c;")
             self.btn_action_right.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "delete.png")))
             self.btn_action_right.setStyleSheet("font-weight: bold; border-radius: 3px;")

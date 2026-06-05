@@ -9,7 +9,7 @@ from gui.shared_components.event_broker import app_broker
 
 class LaneRuleConfigWidget(BaseConfigCard):
     def __init__(self, parent=None):
-        super().__init__(title="Lane Rule", icon_name="rules.png", bg_color="#262c2d", parent=parent)
+        super().__init__(title="Lane Rule", icon_name="rules.png", bg_color="#262c2d", id_prefix="Luật",parent=parent)
         self.old_id = ""
         self.allowed_vehicles = set()
         self._setup_content_ui()
@@ -18,16 +18,10 @@ class LaneRuleConfigWidget(BaseConfigCard):
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 5, 0, 5)
         
-        self.input_id = QLineEdit()
-        self.input_id.setPlaceholderText("VD: 01")
-        self.input_id.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444; padding: 4px;")
-        self.input_id.textChanged.connect(self._on_data_changed)
-        form_layout.addRow("ID:", self.input_id)
-        
         self.btn_vehicles = QPushButton("Chọn loại xe...")
         self.btn_vehicles.setStyleSheet("background-color: #333; text-align: left; padding: 4px;")
         self._setup_vehicle_menu()
-        form_layout.addRow("Allowed:", self.btn_vehicles)
+        form_layout.addRow("Cho phép:", self.btn_vehicles)
         
         self.content_layout.addLayout(form_layout)
 
@@ -37,7 +31,8 @@ class LaneRuleConfigWidget(BaseConfigCard):
         
         for v_type in vehicle_types:
             action = QWidgetAction(menu)
-            checkbox = QCheckBox(v_type.name)
+            # [CẬP NHẬT]: Dùng v_type.value để hiển thị Tiếng Việt
+            checkbox = QCheckBox(v_type.value)
             checkbox.setStyleSheet("padding: 5px;")
             checkbox.toggled.connect(lambda checked, t=v_type: self._on_vehicle_toggled(checked, t))
             action.setDefaultWidget(checkbox)
@@ -54,7 +49,8 @@ class LaneRuleConfigWidget(BaseConfigCard):
         if not self.allowed_vehicles:
             self.btn_vehicles.setText("Chọn loại xe...")
         else:
-            names = [v.name for v in self.allowed_vehicles]
+            # [CẬP NHẬT]: Dùng v.value để gom tên Tiếng Việt lên mặt nút bấm
+            names = [v.value for v in self.allowed_vehicles]
             self.btn_vehicles.setText(", ".join(names)[:18] + "...")
             
         self._on_data_changed()

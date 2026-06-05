@@ -1,8 +1,17 @@
 # --- START OF FILE gui/features/config_builder/canvas_toolbar.py ---
 import os
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSlider, QLabel, QSpacerItem, QSizePolicy, QButtonGroup, QLineEdit, QMenu
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (
+    QWidget, QHBoxLayout, QPushButton, QSlider, QLabel, QSpacerItem, 
+    QSizePolicy, QButtonGroup, QLineEdit, QMenu, QDialog, QVBoxLayout, 
+    QCheckBox, QColorDialog, QFormLayout, QFrame
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtGui import QIcon, QColor
+
+from utils.enums import TrafficVehicleType
+from infrastructure.visual_annotator import AnnotatorConfig
+
+from gui.shared_components.event_broker import app_broker
 
 class CanvasToolbar(QWidget):
     # Các tín hiệu (Signals) phát ra khi người dùng thao tác
@@ -11,6 +20,9 @@ class CanvasToolbar(QWidget):
     toggle_grid = pyqtSignal(bool)   # Bật/tắt lưới
     toggle_fullscreen = pyqtSignal() # Chuyển đổi toàn màn hình
     request_fit_view = pyqtSignal()  
+
+    annotator_config_changed = pyqtSignal(AnnotatorConfig)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(50)
@@ -19,6 +31,8 @@ class CanvasToolbar(QWidget):
         # Đường dẫn gốc tới thư mục assets
         self.assets_dir =  os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "icons"))
         
+        self.current_annotator_config = AnnotatorConfig()
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -57,9 +71,15 @@ class CanvasToolbar(QWidget):
         
         self.btn_grid = QPushButton()
         self.btn_grid.setIcon(QIcon(os.path.join(self.assets_dir, "grid.png")))
-        self.btn_grid.setToolTip("Bật/tắt lưới")
+        self.btn_grid.setToolTip("Bật/tắt Lớp Đồ họa AI (Chuột PHẢI để tùy chỉnh)")
         self.btn_grid.setCheckable(True)
-        self.btn_grid.toggled.connect(self.toggle_grid.emit)
+        self.btn_grid.setChecked(False) 
+        
+        self.btn_grid.toggled.connect(self._on_grid_toggled)
+        
+        # Bắt sự kiện click chuột phải để mở Popup (sử dụng customContextMenuRequested)
+        self.btn_grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.btn_grid.customContextMenuRequested.connect(self._show_annotator_popup)
 
         # 3. THANH TRƯỢT ZOOM (Zoom Slider)
         self.slider_zoom = QSlider(Qt.Orientation.Horizontal)
@@ -163,4 +183,170 @@ class CanvasToolbar(QWidget):
         for btn in self.tool_group.buttons():
             btn.setChecked(False)
         self.mode_changed.emit(mode_str)
-# --- END OF FILE gui/features/config_builder/canvas_toolbar.py ---
+    
+    def _show_annotator_popup(self, pos: QPoint):
+        """Hiển thị bảng tùy chỉnh khi click chuột phải vào nút Grid"""
+        popup = AnnotatorConfigPopup(self.current_annotator_config, self)
+        
+        # Kết nối tín hiệu khi có thay đổi trong Popup
+        popup.config_changed.connect(self._on_annotator_config_updated)
+        
+        # Tính toán tọa độ để popup hiện ngay trên đỉnh của nút Grid
+        global_pos = self.btn_grid.mapToGlobal(QPoint(0, 0))
+        # Nâng popup lên trên, bù trừ chiều cao (Khoảng 250px)
+        popup.move(global_pos.x(), global_pos.y() - 250) 
+        
+        popup.exec() # Hiển thị Modal
+
+    def _on_annotator_config_updated(self, new_config: AnnotatorConfig):
+        """Cập nhật cấu hình hiện tại và bắn tín hiệu cho Controller"""
+        self.current_annotator_config = new_config
+        self.annotator_config_changed.emit(new_config)
+
+        app_broker.request_toggle_rois_visibility.emit(new_config.show_rois)    
+
+    def _on_grid_toggled(self, checked: bool):
+        self.toggle_grid.emit(checked)
+
+# ==============================================================================
+# 2. WIDGET POPUP TÙY CHỈNH CHO VISUAL ANNOTATOR
+# ==============================================================================
+# --- TRÍCH ĐOẠN CẬP NHẬT POPUP: gui/features/config_builder/canvas_toolbar.py ---
+
+class AnnotatorConfigPopup(QDialog):
+    """
+    Cửa sổ nhỏ (Popup) hiển thị khi click chuột phải vào nút Grid.
+    Cho phép điều chỉnh chi tiết cấu hình của VisualAnnotator.
+    """
+    config_changed = pyqtSignal(AnnotatorConfig)
+
+    def __init__(self, current_config: AnnotatorConfig, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        
+        # [CẬP NHẬT]: Tinh chỉnh CSS để gỡ bỏ nền rác, làm mịn giao diện (Dark theme đồng nhất)
+        self.setStyleSheet("""
+            QDialog { 
+                background-color: #2b2b2b; 
+                border: 1px solid #444; 
+                border-radius: 5px; 
+            }
+            QLabel { 
+                color: #ffffff; 
+                font-weight: bold; 
+                background-color: transparent; 
+            }
+            QCheckBox { 
+                color: #e0e0e0; 
+                spacing: 8px; 
+                background-color: transparent;
+            }
+            QCheckBox::indicator { width: 16px; height: 16px; }
+            QFrame[frameShape="4"] { /* HLine */
+                color: #555;
+                background-color: #555;
+            }
+        """)
+        
+        self.config = current_config 
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+
+        # [CẬP NHẬT]: Đổi Tiêu đề
+        lbl_title = QLabel("CẤU HÌNH LƯỚI")
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl_title)
+        
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        layout.addWidget(line)
+
+        # 1. Nhóm Bật/Tắt tính năng
+        self.chk_show_trails = QCheckBox("Hiển thị quỹ đạo di chuyển")
+        self.chk_show_trails.setChecked(self.config.show_trails)
+        self.chk_show_trails.toggled.connect(self._on_setting_changed)
+        
+        self.chk_violators_only = QCheckBox("Chỉ hiển thị xe vi phạm")
+        self.chk_violators_only.setChecked(self.config.show_violators_only)
+        self.chk_violators_only.setStyleSheet("font-weight: bold;") 
+        self.chk_violators_only.toggled.connect(self._on_setting_changed)
+
+        self.chk_show_rois = QCheckBox("Hiển thị Region of Interest (ROIs)")
+        self.chk_show_rois.setChecked(self.config.show_rois)
+        self.chk_show_rois.setStyleSheet("font-weight: bold;") 
+        self.chk_show_rois.toggled.connect(self._on_setting_changed)
+        
+        layout.addWidget(self.chk_show_trails)
+        layout.addWidget(self.chk_violators_only)
+        layout.addWidget(self.chk_show_rois)
+
+        # 2. Nhóm Lọc Loại Xe
+        layout.addWidget(QLabel("Loại phương tiện:"))
+        self.vehicle_checkboxes = {}
+        
+        grid_vehicles = QHBoxLayout()
+        v_types_to_show = [TrafficVehicleType.CAR, TrafficVehicleType.MOTORCYCLE, TrafficVehicleType.TRUCK, TrafficVehicleType.BUS]
+        
+        for v_type in v_types_to_show:
+            chk = QCheckBox(v_type.name)
+            chk.setChecked(self.config.visible_classes.get(v_type, True))
+            chk.toggled.connect(self._on_setting_changed)
+            self.vehicle_checkboxes[v_type] = chk
+            grid_vehicles.addWidget(chk)
+            
+        layout.addLayout(grid_vehicles)
+
+        # 3. Đổi màu trạng thái vi phạm
+        layout.addWidget(QLabel("Bảng màu:"))
+        form_colors = QFormLayout()
+        
+        self.btn_color_safe = self._create_color_button(self.config.violation_colors["SAFE"], "SAFE")
+        self.btn_color_violating = self._create_color_button(self.config.violation_colors["VIOLATING"], "VIOLATING")
+        
+        form_colors.addRow("Xe an toàn:", self.btn_color_safe)
+        form_colors.addRow("Xe vi phạm:", self.btn_color_violating)
+        
+        layout.addLayout(form_colors)
+    
+    def _create_color_button(self, rgb: tuple, state_key: str) -> QPushButton:
+        btn = QPushButton()
+        btn.setFixedSize(60, 22)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        hex_color = "#{:02x}{:02x}{:02x}".format(*rgb)
+        btn.setStyleSheet(f"background-color: {hex_color}; border: 1px solid #777; border-radius: 3px;")
+        
+        btn.clicked.connect(lambda: self._choose_color(btn, state_key))
+        return btn
+
+    def _choose_color(self, button: QPushButton, state_key: str):
+        current_rgb = self.config.violation_colors[state_key]
+        initial_color = QColor(current_rgb[0], current_rgb[1], current_rgb[2])
+        
+        color = QColorDialog.getColor(initial_color, self, f"Chọn màu cho {state_key}")
+        
+        if color.isValid():
+            new_rgb = (color.red(), color.green(), color.blue())
+            self.config.violation_colors[state_key] = new_rgb
+            
+            hex_color = "#{:02x}{:02x}{:02x}".format(*new_rgb)
+            button.setStyleSheet(f"background-color: {hex_color}; border: 1px solid #777; border-radius: 3px;")
+            
+            self._on_setting_changed()
+
+    def _on_setting_changed(self):
+        self.config.show_trails = self.chk_show_trails.isChecked()
+        self.config.show_violators_only = self.chk_violators_only.isChecked()
+        self.config.show_rois = self.chk_show_rois.isChecked()
+        
+        for v_type, chk in self.vehicle_checkboxes.items():
+            self.config.visible_classes[v_type] = chk.isChecked()
+            
+        self.config_changed.emit(self.config)
+    
+
+# --- END OF TRÍCH ĐOẠN POPUP ---

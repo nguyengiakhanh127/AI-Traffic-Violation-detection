@@ -5,9 +5,10 @@ from PyQt6.QtCore import QPropertyAnimation, QAbstractAnimation, QParallelAnimat
 from PyQt6.QtGui import QIcon
 
 class CollapsibleBox(QWidget):
-    def __init__(self, title="", max_height: int = 400, parent=None):
+    def __init__(self, title="", max_height: int = 1100, parent=None): # Nâng ngưỡng an toàn lên 500px
         super().__init__(parent)
-        self.max_height = max_height # Lưu lại ngưỡng trần
+        self.max_height = max_height
+
         
         # Thư mục chứa Icon
         self.icon_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "icons")
@@ -81,14 +82,17 @@ class CollapsibleBox(QWidget):
         )
         
         # Tính toán chiều cao thực tế của nội dung bên trong
-        content_height = self.content_layout.sizeHint().height() + 15 # Đệm 15px cho rộng rãi
-        
-        # [CẬP NHẬT LOGIC ZOOM DROPDOWN]:
-        # Nếu chiều cao vượt quá ngưỡng self.max_height, ta ghìm nó lại ở mức max_height.
-        # Lúc này, QScrollArea bên trong sẽ tự động kích hoạt thanh cuộn dọc (Scrollbar) cho người dùng cuộn.
+        content_height = self.content_layout.sizeHint().height() + 15
         target_height = min(content_height, self.max_height)
         
         self.content_animation.setStartValue(0)
         self.content_animation.setEndValue(target_height)
-        
         self.toggle_animation.start()
+    
+    def update_content_height(self):
+        if self.toggle_button.isChecked():
+            content_height = self.content_layout.sizeHint().height() + 15
+            
+            target_height = min(content_height, self.max_height)
+            
+            self.content_area.setMaximumHeight(target_height)

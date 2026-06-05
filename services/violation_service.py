@@ -1,42 +1,80 @@
+# --- START OF FILE services/violation_service.py ---
+
 import os
 import logging
 import numpy as np
 import cv2
+import threading
+from queue import Queue, Full
 from datetime import datetime
-from typing import List
-
-# [THÊM MỚI 1]: Import thư viện quản lý Thread Pool
-from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional
+from dataclasses import dataclass
 
 from core.vehicle import Vehicle
 from core.engine import ViolationEvent, InspectionContext 
 from core.trafficlight import TrafficLight
 from infrastructure.evidence_generator import EvidenceGenerator
+from infrastructure.database_service import DatabaseService
 
-# [THÊM MỚI 2]: Import ALPR Service
+# Import mô hình ALPR mới thiết kế
 from infrastructure.ai_adapters.alpr.plate_recognizer import LicensePlateRecognizer
 
 logger = logging.getLogger("ViolationService")
 
+@dataclass
+class ALPRTask:
+    """Cấu trúc dữ liệu chứa nhiệm vụ đọc biển số chờ được xử lý"""
+    record_id: int
+    vehicle_crop: np.ndarray
+    event_folder: str
+    timestamp_str: str
+
 class ViolationService:
-    def __init__(self, rule_engine, record_manager, video_buffer, lane_manager, zone_manager, db_service=None, alpr_service=None):
+    """
+    Dịch vụ điều phối: Kiểm tra vi phạm và kích hoạt chuỗi ghi nhận bằng chứng.
+    Hỗ trợ xử lý I/O và ALPR bất đồng bộ qua các Hàng đợi (Queues) và Worker Threads.
+    """
+    def __init__(
+        self, 
+        rule_engine, 
+        record_manager, 
+        video_buffer, 
+        lane_manager, 
+        zone_manager, 
+        evidence_generator: EvidenceGenerator, 
+        db_service: Optional[DatabaseService] = None, 
+        alpr_service: Optional[LicensePlateRecognizer] = None
+    ):
         self.rule_engine = rule_engine
         self.record_manager = record_manager
         self.video_buffer = video_buffer
         self.lane_manager = lane_manager
         self.zone_manager = zone_manager
+        self.evidence_generator = evidence_generator 
         self.db_service = db_service 
-        self.enable_db_logging = False 
+        self.alpr_service = alpr_service
         
-        self.current_camera_id = None 
-
-        # [THÊM MỚI 3]: Nhận ALPR service và tạo ThreadPool (max 2 luồng để không ăn hết CPU)
-        self.alpr_service: LicensePlateRecognizer = alpr_service
-        self.background_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="OCR_Worker")
+        self.current_camera_id: Optional[int] = None 
+        
+        # =========================================================
+        # [CẬP NHẬT KIẾN TRÚC]: Hàng đợi và Worker Thread cho ALPR
+        # =========================================================
+        self._alpr_queue: Queue[ALPRTask] = Queue(maxsize=50) # Chứa tối đa 50 xe vi phạm chờ đọc biển
+        self._is_running: bool = True
+        
+        # Chỉ bật luồng OCR nếu mô hình đã được cung cấp (tiêm) vào Service
+        if self.alpr_service is not None:
+            self._alpr_worker_thread = threading.Thread(
+                target=self._async_alpr_worker,
+                name="ALPRWorkerThread",
+                daemon=True
+            )
+            self._alpr_worker_thread.start()
+            logger.info("✅ Luồng ngầm đọc biển số (ALPR Thread) đã khởi động.")
 
     def inspect_and_log(
         self, active_vehicles: List[Vehicle], current_time: datetime, frame: np.ndarray, 
-        traffic_lights: List['TrafficLight'] = None
+        traffic_lights: Optional[List[TrafficLight]] = None
     ) -> List[ViolationEvent]:
 
         new_violations_this_frame = []
@@ -58,6 +96,7 @@ class ViolationService:
                 traffic_lights=traffic_lights, 
                 current_time=current_time
             )
+            
             violations = self.rule_engine.inspect_vehicle(vehicle, context)
 
             if violations:
@@ -66,105 +105,111 @@ class ViolationService:
                     
                     if log_result:
                         new_record, evidence_dir = log_result
-                        
                         logger.info(f"🚨 [PHÁT HIỆN]: {event.error_name} - Xe {vehicle.vehicle_type.name} ID:{vehicle.id}")
                         new_violations_this_frame.append(event)
                         
                         vehicle.add_violation_frame(event.error_name, frame, vehicle.current_bbox)
                         
-                        # (Có thể mở lại if self.enable_db_logging nếu muốn điều khiển qua GUI)
-                        self._trigger_evidence_chain(vehicle, event, new_record, current_time, current_lane, evidence_dir)
+                        self._trigger_evidence_chain(vehicle, event, current_time, current_lane, evidence_dir)
                             
         return new_violations_this_frame
 
-    def _trigger_evidence_chain(self, vehicle, event, record, current_time, current_lane, event_folder: str) -> None:
+    def _trigger_evidence_chain(self, vehicle: Vehicle, event: ViolationEvent, 
+                                current_time: datetime, current_lane, event_folder: str) -> None:
+        """Kích hoạt chuỗi lưu trữ bằng cách ném nhiệm vụ vào các Hàng đợi (Non-blocking)"""
         try:
-            # 1. Ghi vào CSDL TRƯỚC để lấy ID (OCR cần ID này để update ngược lại)
             insert_id = None
             if self.db_service and self.current_camera_id:
                 lane_str = current_lane.lane_id if current_lane else "Ngoài làn"
                 
+                # 1. Ghi DB lấy ID
                 insert_id = self.db_service.violations.insert(
                     camera_id=self.current_camera_id,
                     thoi_gian=current_time.strftime("%Y-%m-%d %H:%M:%S"),
                     ma_loi=event.error_name,
-                    loai_xe=vehicle.vehicle_type.name,
+                    loai_xe=vehicle.vehicle_type.value, 
                     lan_duong=lane_str,
                     bien_so="", 
                     duong_dan=event_folder
                 )
-                if insert_id > 0:
-                    logger.info(f"💾 Đã lưu DB (ID: {insert_id}).")
-                else:
-                    logger.error("❌ Lưu Database thất bại!")
-            else:
-                logger.warning("⚠️ Bỏ qua lưu DB vì chưa cấu hình Camera ID.")
-
+            
             file_timestamp = current_time.strftime("%Hh%Mm%Ss_%f")[:-3]
 
-            # 2. Kích hoạt xuất Video
+            # 2. Kích hoạt xuất Video (Ném vào Queue)
             video_filepath = os.path.join(event_folder, f"{file_timestamp}_video.mp4")
             self.video_buffer.trigger_export(video_filepath)
 
-            # 3. Kích hoạt xuất Ảnh
-            EvidenceGenerator.export_evidence_images(
+            # 3. Kích hoạt xuất Ảnh Full (Ném vào Queue)
+            self.evidence_generator.export_evidence_images(
                 vehicle=vehicle, 
                 violation_code=event.error_name,
                 img_dir=event_folder, 
                 timestamp_str=file_timestamp
             )
 
+            # =========================================================
+            # [CẬP NHẬT]: 4. Kích hoạt luồng ALPR (Đẩy vào Queue)
+            # =========================================================
             if self.alpr_service and insert_id is not None:
-                # Trích xuất ma trận ảnh xe ngay tại đây
-                vehicle_crop = EvidenceGenerator.extract_crop_for_ocr(vehicle, event.error_name)
+                # Trích xuất ảnh xe bằng CPU (Rất nhanh)
+                vehicle_crop = self.evidence_generator.extract_crop_for_ocr(vehicle, event.error_name)
                 
                 if vehicle_crop is not None:
-                    # [VÁ LỖI TẠI ĐÂY]: Kiểm tra xem ThreadPool có còn sống không.
-                    # Nếu nó bằng None hoặc đã bị shutdown (cờ _shutdown = True) -> Tạo cái mới!
-                    if getattr(self, 'background_executor', None) is None or self.background_executor._shutdown:
-                        logger.info("Khởi tạo lại ThreadPool cho OCR...")
-                        from concurrent.futures import ThreadPoolExecutor # Đảm bảo đã import
-                        self.background_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="OCR_Worker")
-                    
-                    # Ném task vào ThreadPool
-                    self.background_executor.submit(
-                        self._run_ocr_task, insert_id, vehicle_crop, event_folder, file_timestamp
+                    task = ALPRTask(
+                        record_id=insert_id,
+                        vehicle_crop=vehicle_crop,
+                        event_folder=event_folder,
+                        timestamp_str=file_timestamp
                     )
+                    try:
+                        self._alpr_queue.put_nowait(task)
+                    except Full:
+                        logger.warning(f"⚠️ Hàng đợi ALPR đã đầy! Bỏ qua đọc biển số cho ID {insert_id}")
 
         except Exception as e:
             logger.error(f"❌ Lỗi khi thực thi chuỗi sinh bằng chứng: {e}")
 
-    # ==============================================================
-    # [THÊM MỚI]: HÀM CHẠY NGẦM BỞI THREAD POOL ĐỂ ĐỌC BIỂN SỐ
-    # ==============================================================
-    def _run_ocr_task(self, record_id: int, vehicle_crop: np.ndarray, event_folder: str, timestamp_str: str):
-        try:
-            # 1. Gọi AI nhận diện (Sẽ nhận về 2 biến)
-            plate_text, plate_img = self.alpr_service.recognize(vehicle_crop)
+    # =========================================================
+    # HÀM XỬ LÝ CHẠY NGẦM CHO ALPR
+    # =========================================================
+    def _async_alpr_worker(self) -> None:
+        """Worker Thread: Liên tục lấy ảnh từ Hàng đợi để giải mã biển số"""
+        while self._is_running:
+            task: ALPRTask = self._alpr_queue.get()
             
-            # 2. Lưu ảnh biển số ra đĩa (Nếu có)
-            if plate_img is not None and event_folder:
-                plate_filepath = os.path.join(event_folder, f"{timestamp_str}_5_plate_crop.jpg")
-                cv2.imwrite(plate_filepath, plate_img)
-            
-            # 3. Cập nhật lại CSDL
-            if self.db_service:
-                self.db_service.violations.update_license_plate(record_id, plate_text)
+            if task is None: # Tín hiệu đóng luồng (Poison Pill)
+                break
                 
-                if plate_text != "Không xác định":
-                    logger.info(f"🔎 [OCR THÀNH CÔNG]: ID {record_id} -> Biển số: {plate_text} (Đã lưu ảnh)")
-                else:
-                    logger.info(f"🔎 [OCR THẤT BẠI]: ID {record_id} không nhận diện được chữ.")
+            try:
+                # 1. Gọi mô hình xử lý
+                plate_text, drawn_img = self.alpr_service.recognize(task.vehicle_crop)
                 
-        except Exception as e:
-            logger.error(f"❌ Lỗi khi chạy luồng nền OCR: {e}")
-            if self.db_service:
-                try: self.db_service.violations.update_license_plate(record_id, "Không xác định")
-                except: pass
+                # 2. Lưu ảnh biển số ra thư mục bằng chứng (I/O)
+                if drawn_img is not None and task.event_folder:
+                    plate_filepath = os.path.join(task.event_folder, f"{task.timestamp_str}_5_plate_crop.jpg")
+                    cv2.imwrite(plate_filepath, drawn_img)
+                
+                # 3. Cập nhật biển số vào Database thông qua Connection Pool
+                if self.db_service:
+                    self.db_service.violations.update_license_plate(task.record_id, plate_text)
+                    
+                    if plate_text != "Không xác định":
+                        logger.info(f"🔎 [ALPR]: ID {task.record_id} -> {plate_text}")
+                    
+            except Exception as e:
+                logger.error(f"❌ Lỗi nội bộ trong luồng ALPR: {e}")
+            finally:
+                self._alpr_queue.task_done()
+
+    def shutdown(self) -> None:
+        """Đóng các luồng an toàn khi tắt phần mềm"""
+        self._is_running = False
         
-    def shutdown(self):
-        """Hàm dọn dẹp khi tắt phần mềm hoặc reset hệ thống"""
-        if hasattr(self, 'background_executor'):
-            logger.info("Đang chờ OCR xử lý nốt các biển số cuối cùng...")
-            self.background_executor.shutdown(wait=True)
-            logger.info("Luồng OCR đã đóng an toàn.")
+        # Bắn Poison Pill để đóng luồng ALPR
+        if hasattr(self, '_alpr_worker_thread') and self._alpr_worker_thread.is_alive():
+            logger.info("⏳ Đang chờ ALPR xử lý nốt biển số cuối cùng...")
+            self._alpr_queue.put(None) 
+            self._alpr_worker_thread.join(timeout=3.0)
+            logger.info("✅ Luồng ALPR đã đóng an toàn.")
+
+# --- END OF FILE services/violation_service.py ---

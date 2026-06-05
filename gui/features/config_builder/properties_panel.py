@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QFrame, QMenu, QScrollArea,
     QSlider, QComboBox, QCheckBox
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 import os
 
@@ -13,8 +13,10 @@ from gui.features.config_builder.components.lane_config_widget import LaneConfig
 from gui.features.config_builder.components.zone_config_widget import ZoneConfigWidget
 from gui.features.config_builder.components.light_config_widget import LightConfigWidget
 from gui.features.config_builder.components.lane_rule_config_widget import LaneRuleConfigWidget
+from gui.features.config_builder.components.base_config_card import BaseConfigCard
 from gui.shared_components.event_broker import *
 
+from utils import paths
 class PropertiesPanel(QWidget):
     # =========================================================================
     # [CẬP NHẬT]: CHỈ GIỮ LẠI CÁC TÍN HIỆU CỦA RIÊNG PANEL (Không làm trung gian nữa)
@@ -25,7 +27,7 @@ class PropertiesPanel(QWidget):
     export_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     start_ai_requested = pyqtSignal()
-
+    import_requested = pyqtSignal(int)
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedWidth(320)
@@ -60,11 +62,14 @@ class PropertiesPanel(QWidget):
         self.combo_cam_select.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444; padding: 4px; color: white;")
         self.combo_cam_select.setToolTip("Chọn Camera để áp dụng cấu hình này")
         
-        # 2. KHỞI TẠO NÚT "THÊM NHANH" (CẤP CỨU)
-        self.btn_add_cam = QPushButton("➕")
-        self.btn_add_cam.setFixedSize(26, 26)
-        self.btn_add_cam.setToolTip("Thêm Camera mới vào Cơ sở dữ liệu")
-        self.btn_add_cam.setStyleSheet("background-color: #2b5797; color: white; font-weight: bold; border-radius: 3px;")
+        # 2. KHỞI TẠO NÚT "IMPORT"
+        self.btn_import = QPushButton()
+        self.btn_import.setIcon(QIcon(os.path.join(self.icon_dir, "folder.png"))) 
+        self.btn_import.setFixedSize(26, 26)
+        self.btn_import.setToolTip("Tải cấu hình (Import) từ Cơ sở dữ liệu")
+        self.btn_import.setStyleSheet("background-color: #2b5797; color: white; border-radius: 3px;")
+        self.btn_import.clicked.connect(self._on_import_clicked)
+
 
         # 3. KHỞI TẠO NÚT BROWSE (BỊ THIẾU LÚC NÃY)
         self.btn_browse = QPushButton()
@@ -77,13 +82,13 @@ class PropertiesPanel(QWidget):
         # 4. THÊM TẤT CẢ VÀO LAYOUT THEO ĐÚNG THỨ TỰ
         row1_layout.addWidget(lbl_cam_icon)
         row1_layout.addWidget(self.combo_cam_select, stretch=1)
-        row1_layout.addWidget(self.btn_add_cam)
+        row1_layout.addWidget(self.btn_import)
         row1_layout.addWidget(self.btn_browse)
         
         row2_layout = QHBoxLayout()
         row2_layout.addWidget(QLabel("FPS:"))
         self.lbl_fps = QLabel("N/A")
-        self.lbl_fps.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        self.lbl_fps.setStyleSheet("font-weight: bold;")
         self.lbl_frame_count = QLabel("0 / 0")
         self.lbl_frame_count.setStyleSheet("color: #aaa;")
         row2_layout.addWidget(self.lbl_fps)
@@ -91,9 +96,10 @@ class PropertiesPanel(QWidget):
         row2_layout.addWidget(self.lbl_frame_count)
         
         row3_layout = QHBoxLayout()
-        self.btn_play = QPushButton("▶")
+        self.btn_play = QPushButton()
+        self.btn_play.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "play.png")))
         self.btn_play.setFixedSize(30, 24)
-        self.btn_play.setStyleSheet("background-color: #007acc; border-radius: 3px; font-weight: bold; color: white;")
+        self.btn_play.setStyleSheet("background-color: #f29c22; border-radius: 3px; font-weight: bold; color: white;")
         self.btn_play.clicked.connect(self.play_pause_requested.emit)
         
         self.slider_video = QSlider(Qt.Orientation.Horizontal)
@@ -139,6 +145,7 @@ class PropertiesPanel(QWidget):
         inner_layout.addLayout(action_layout)
         inner_layout.addWidget(self.scroll_area)
         self.config_box.set_content_layout(inner_layout)
+
         main_layout.addWidget(self.config_box)
         main_layout.addStretch()
 
@@ -164,13 +171,21 @@ class PropertiesPanel(QWidget):
         main_layout.addWidget(self.chk_save_db)
 
         # Nút Start AI (Giữ nguyên)
-        self.btn_start_ai = QPushButton("🚀 KHỞI CHẠY AI GIÁM SÁT")
+        self.btn_start_ai = QPushButton("Chạy phát hiện đối tượng")
         self.btn_start_ai.setStyleSheet("""
-            QPushButton { background-color: #5cb85c; color: white; font-weight: bold; padding: 12px; border-radius: 4px; font-size: 13px; }
-            QPushButton:hover { background-color: #4cae4c; }
+            QPushButton { background-color: #f69926; color: black; font-weight: bold; padding: 12px; border-radius: 4px; font-size: 13px; }
+            QPushButton:hover { background-color: #e17e26; }
         """)
         self.btn_start_ai.clicked.connect(self.start_ai_requested.emit)
         main_layout.addWidget(self.btn_start_ai)
+
+    def _on_import_clicked(self):
+        cam_id = self.combo_cam_select.currentData()
+        if cam_id:
+            self.import_requested.emit(cam_id)
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Lưu ý", "Vui lòng chọn Camera trước khi tải cấu hình!")
 
     def _on_browse_clicked(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Chọn File Media", "", "Media Files (*.mp4 *.avi *.mkv *.jpg *.png);;All Files (*)")
@@ -180,10 +195,10 @@ class PropertiesPanel(QWidget):
 
     def _show_add_menu(self):
         menu = QMenu(self)
-        menu.addAction("Thêm Làn đường (Traffic Lane)", lambda: self._add_card("Lane"))
-        menu.addAction("Thêm Vùng cấm (Traffic Zone)", lambda: self._add_card("Zone"))
-        menu.addAction("Thêm Đèn GT (Traffic Light)", lambda: self._add_card("Light"))
-        menu.addAction("Thêm Luật Làn (Lane Rule)", lambda: self._add_card("Rule"))
+        menu.addAction("Thêm Làn đường", lambda: self._add_card("Lane"))
+        menu.addAction("Thêm Vùng cấm", lambda: self._add_card("Zone"))
+        menu.addAction("Thêm Đèn tín hiệu", lambda: self._add_card("Light"))
+        menu.addAction("Thêm Luật Làn", lambda: self._add_card("Rule"))
         menu.exec(self.btn_add_obj.mapToGlobal(self.btn_add_obj.rect().bottomLeft()))
 
     def _add_card(self, obj_type: str):
@@ -194,22 +209,29 @@ class PropertiesPanel(QWidget):
         elif obj_type == "Rule": card = LaneRuleConfigWidget()
         
         if card:
-            # [CẬP NHẬT TỐI THƯỢNG]: Bỏ sạch 100% các dòng connect vẽ vời trung gian. Chỉ giữ nút Xóa.
             card.request_delete.connect(self._remove_card)
-            
             self.object_list_layout.addWidget(card)
+
             if hasattr(self, 'current_registry_data') and hasattr(card, 'update_registry_list'):
                 card.update_registry_list(self.current_registry_data)
+
+            self.config_box.update_content_height()
 
     def _remove_card(self, card_widget):
         self.object_list_layout.removeWidget(card_widget)
         card_widget.deleteLater()
+
+        QTimer.singleShot(10, self.config_box.update_content_height)
+
 
     def _clear_all_cards(self):
         while self.object_list_layout.count():
             child = self.object_list_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+                
+        BaseConfigCard.reset_counters()
+        QTimer.singleShot(10, self.config_box.update_content_height)
 
     def update_video_info(self, fps: float, total_frames: int):
         self.lbl_fps.setText(f"{fps:.1f}")

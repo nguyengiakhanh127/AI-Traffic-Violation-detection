@@ -14,19 +14,15 @@ import os
 class LaneConfigWidget(BaseConfigCard):
     def __init__(self, parent=None):
         super().__init__(
-            title="Traffic Lane", icon_name="road.png", bg_color="#2a2a2d", parent=parent
+            title="Traffic Lane", icon_name="road.png", bg_color="#2a2a2d", id_prefix="Làn",parent=parent
         )
         self.current_obj_id = None
+        
         self._setup_content_ui()
 
     def _setup_content_ui(self):
         form_layout = QFormLayout()
         form_layout.setContentsMargins(0, 5, 0, 5)
-        
-        self.input_id = QLineEdit()
-        self.input_id.setPlaceholderText("VD: 01")
-        self.input_id.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444; padding: 4px;")
-        form_layout.addRow("ID:", self.input_id)
         
         self.combo_rule_ref = ReferenceComboBox(target_type="RULES", allow_manual=False)
         form_layout.addRow("Lane Rule:", self.combo_rule_ref)
@@ -34,7 +30,7 @@ class LaneConfigWidget(BaseConfigCard):
         self.content_layout.addLayout(form_layout)
 
         edges_layout = QHBoxLayout()
-        self.lbl_edges_count = QLabel("Status: Trống")
+        self.lbl_edges_count = QLabel("Trạng thái: ")
         self.lbl_edges_count.setStyleSheet("color: #d4a017;") 
         
         self.combo_ref = ReferenceComboBox(target_type="POLYGONS", allow_manual=False)
@@ -113,7 +109,11 @@ class LaneConfigWidget(BaseConfigCard):
                 child.widget().deleteLater()
         self.sub_edges_container.hide()
 
-    def build_sub_edges_ui(self, edge_count: int):
+    def build_sub_edges_ui(self, edge_count: int) -> None:
+        """
+        Khởi tạo giao diện chọn loại vạch kẻ đường cho từng cạnh của đa giác.
+        Cập nhật: Hiển thị tiếng Việt cho người dùng dễ hiểu.
+        """
         self._clear_sub_edges()
         self.lbl_edges_count.setText("Đã tham chiếu: ")
         self.lbl_edges_count.setStyleSheet("color: #5cb85c;")
@@ -128,14 +128,17 @@ class LaneConfigWidget(BaseConfigCard):
             lbl_edge.setFixedWidth(50)
             
             combo_type = QComboBox()
-            combo_type.addItems([e.name for e in TrafficLineType])
+            # [CẬP NHẬT]: Hiển thị tiếng Việt (e.value), lưu trữ key tiếng Anh (e.name) vào userData
+            for e in TrafficLineType:
+                combo_type.addItem(e.value, userData=e.name)
+                
             combo_type.setStyleSheet("background-color: #1e1e1e; border: 1px solid #444;")
             self.sub_edge_combos.append(combo_type)
             
             row_layout.addWidget(lbl_edge)
             row_layout.addWidget(combo_type)
             
-            # [CẬP NHẬT]: Phát sóng highlight cạnh con
+            # Phát sóng highlight cạnh con khi trỏ chuột
             row_widget.enterEvent = lambda event, idx=i: app_broker.request_highlight_sub_edge.emit(self.current_obj_id, idx)
             row_widget.leaveEvent = lambda event, idx=i: app_broker.clear_highlight_sub_edge.emit(self.current_obj_id, idx)
             

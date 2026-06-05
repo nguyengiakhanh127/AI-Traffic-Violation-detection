@@ -1,20 +1,19 @@
+# --- START OF FILE gui/features/violation_reviewer/components/evidence_viewer.py ---
+
 import os
 import cv2
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QStackedWidget, QFrame)
+                             QPushButton, QStackedWidget, QFrame, QGridLayout, QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QPixmap, QImage, QIcon
+from PyQt6.QtGui import QPixmap, QImage, QIcon, QPainter, QColor
 
 from gui.shared_components.event_broker import app_broker
-
 from core.rules import ViolationRegistry, VehicleRegistry
 from utils.enums import TrafficVehicleType, ViolationType
 from utils import paths
 from datetime import datetime
 
 class EvidenceViewer(QWidget):
-    # ... [__init__ và _setup_ui GIỮ NGUYÊN HOÀN TOÀN, CHỈ SỬA HÀM load_evidence BÊN DƯỚI] ...
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("EvidenceViewer")
@@ -27,7 +26,13 @@ class EvidenceViewer(QWidget):
             }
             QPushButton.TabBtn:checked { color: #f39c12; border-bottom: 2px solid #f39c12; }
             QFrame#DisplayFrame { background-color: #000000; border-radius: 5px; }
-        """)
+            
+            /* CSS Mới cho Bảng thông tin (Trong suốt, Căn trái, Chữ trắng đậm) */
+            #InfoTable { background-color: transparent; padding: 10px 0px; }
+            #PropLabel { color: #ffffff; font-weight: bold; font-size: 14px; }
+            #ValLabel { color: #ffffff; font-weight: bold; font-size: 14px; padding-left: 5px; }
+            #ValPlate { color: #f39c12; font-weight: bold; font-size: 16px; padding-left: 5px; }
+        """)    
         
         self.current_folder = ""
         self.current_record_id = None
@@ -67,9 +72,9 @@ class EvidenceViewer(QWidget):
         self.btn_tab_img.toggled.connect(lambda c: self.btn_tab_vid.setChecked(not c))
         self.btn_tab_vid.toggled.connect(lambda c: self.btn_tab_img.setChecked(not c))
 
-        self.btn_approve = QPushButton("✅ DUYỆT & LẬP BIÊN BẢN")
-        self.btn_reject = QPushButton("❌ HỦY BỎ (Sai sót/Xe ưu tiên)")
-        self.btn_print = QPushButton("🖨️ IN BIÊN BẢN PHẠT NGUỘI")
+        self.btn_approve = QPushButton("✅ DUYỆT")
+        self.btn_reject = QPushButton("❌ HỦY BỎ")
+        self.btn_print = QPushButton("🖨️ IN BIÊN BẢN")
 
         self.btn_approve.clicked.connect(lambda: app_broker.submit_approval_decision.emit(self.current_record_id, 1))
         self.btn_reject.clicked.connect(lambda: app_broker.submit_approval_decision.emit(self.current_record_id, -1))
@@ -143,26 +148,23 @@ class EvidenceViewer(QWidget):
 
         layout.addWidget(self.stacked_widget, stretch=1)
 
-        self.lbl_details = QLabel("Vui lòng chọn một bản ghi bên danh sách để xem chi tiết.")
-        self.lbl_details.setWordWrap(True)
-        self.lbl_details.setStyleSheet("color: white; padding-top: 10px;")
-        layout.addWidget(self.lbl_details)
+        # =========================================================
+        # [CẬP NHẬT YÊU CẦU]: BẢNG THÔNG TIN SỰ KIỆN (QGridLayout)
+        # =========================================================
+        self._build_info_table()
+        layout.addWidget(self.info_table_widget)
 
         self.stacked_widget.currentChanged.connect(self._on_tab_changed)
 
+        # Action Layout
         self.action_layout = QHBoxLayout()
-        self.action_layout.setContentsMargins(0, 15, 0, 0)
+        self.action_layout.setContentsMargins(0, 10, 0, 0)
         
-        self.btn_approve = QPushButton("DUYỆT BẢN GHI")
-        self.btn_approve.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "true.png")))
         self.btn_approve.setStyleSheet("background-color: #5cb85c; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
-        
-        self.btn_reject = QPushButton("HỦY BỎ BẢN GHI")
-        self.btn_reject.setIcon(QIcon(os.path.join(paths.ICONS_DIR, "false.png")))
         self.btn_reject.setStyleSheet("background-color: #d9534f; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
-        
-        self.btn_print = QPushButton("🖨️ IN BIÊN BẢN PHẠT NGUỘI")
         self.btn_print.setStyleSheet("background-color: #007acc; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
+        self.btn_approve.hide()
+        self.btn_reject.hide()
         self.btn_print.hide()
 
         self.action_layout.addWidget(self.btn_reject)
@@ -171,20 +173,90 @@ class EvidenceViewer(QWidget):
         
         layout.addLayout(self.action_layout)
 
+    def _build_info_table(self):
+        """Khởi tạo bố cục Bảng Thông tin (Bảng chiếm 100% chiều ngang, Nội dung căn trái)"""
+        self.info_table_widget = QWidget()
+        self.info_table_widget.setObjectName("InfoTable")
+        self.info_table_widget.setVisible(False) 
+
+        # Dùng QVBoxLayout thay vì QHBoxLayout để Grid tự động bung rộng theo chiều ngang
+        main_table_layout = QVBoxLayout(self.info_table_widget)
+        main_table_layout.setContentsMargins(0, 10, 0, 10) # Bỏ lề trái/phải để chiếm sát mép
+
+        # Khởi tạo Grid Layout
+        grid = QGridLayout()
+        grid.setSpacing(15) 
+        
+        self.val_labels = {}
+        # Định nghĩa 6 dòng (Tên hiển thị nội bộ, Tên file Icon, ObjectName cho CSS)
+        rows_def = [
+            ("camera", "Camera", "thin_unfill_camera.png", "ValLabel"),
+            ("time", "Thời gian phát hiện", "unfill_clock.png", "ValLabel"),
+            ("warning", "Loại cảnh báo", "unfill_warning.png", "ValLabel"),
+            ("vehicle", "Đối tượng", "unfill_car.png", "ValLabel"),
+            ("lane", "Làn đường", "unfill_lane.png", "ValLabel"),
+            ("plate", "Biển số", "unfill_license_plate.png", "ValPlate"),
+        ]
+
+        ICON_GRAY_COLOR = "#aaaaaa" 
+
+        for i, (key, text, icon_file, obj_name) in enumerate(rows_def):
+            prop_wrap = QWidget()
+            prop_layout = QHBoxLayout(prop_wrap)
+            prop_layout.setContentsMargins(0, 0, 0, 0) 
+            prop_layout.setSpacing(10)
+            
+            prop_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            
+            icon_path = os.path.join(paths.ICONS_DIR, icon_file)
+            if os.path.exists(icon_path):
+                # Tải ảnh gốc
+                original_pixmap = QPixmap(icon_path).scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                
+                # Phủ màu xám
+                gray_pixmap = self._colorize_icon(original_pixmap, ICON_GRAY_COLOR)
+                
+                icon_lbl = QLabel()
+                icon_lbl.setPixmap(gray_pixmap)
+                prop_layout.addWidget(icon_lbl)
+            else:
+                emoji = {"camera": "📷", "time": "⏱️", "warning": "⚠️", "vehicle": "🚗", "lane": "🛣️", "plate": "🔡"}.get(key, "🔹")
+                lbl_emoji = QLabel(emoji)
+                # Nếu không có icon ảnh, ép màu chữ của Emoji thành màu xám
+                lbl_emoji.setStyleSheet(f"color: {ICON_GRAY_COLOR};")
+                prop_layout.addWidget(lbl_emoji)
+                
+            lbl_prop = QLabel(f"{text}:")
+            lbl_prop.setObjectName("PropLabel")
+            prop_layout.addWidget(lbl_prop)
+            
+            grid.addWidget(prop_wrap, i, 0)
+            
+            lbl_val = QLabel("-")
+            lbl_val.setObjectName(obj_name)
+            lbl_val.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            
+            grid.addWidget(lbl_val, i, 1)
+            self.val_labels[key] = lbl_val
+
+        grid.setColumnMinimumWidth(0, 200) 
+        grid.setColumnStretch(1, 1)
+
+        main_table_layout.addLayout(grid)
+
+
     def _wire_broker(self):
         app_broker.violation_row_selected.connect(self.load_evidence)
 
 
     def load_evidence(self, record_data: dict):
-        """[CẬP NHẬT 1]: Chỉnh sửa lấy dữ liệu bằng Key Tiếng Việt"""
-        self.current_folder = record_data.get('duong_dan_bang_chung', '') # Đổi từ evidence_path
+        self.current_folder = record_data.get('duong_dan_bang_chung', '') 
         self.current_record_id = record_data.get('id') 
 
-        raw_error_code = record_data.get('ma_loi_vi_pham', '') # Đổi từ violation_code
+        raw_error_code = record_data.get('ma_loi_vi_pham', '') 
         ui_error_name = raw_error_code
-        status = record_data.get('trang_thai_duyet', 0) # Đổi từ is_reviewed
+        status = record_data.get('trang_thai_duyet', 0) 
 
-        # Ẩn hiện nút tương ứng trạng thái
         if status == 0: 
             self.btn_approve.show()
             self.btn_reject.show()
@@ -198,14 +270,12 @@ class EvidenceViewer(QWidget):
             self.btn_reject.hide()
             self.btn_print.hide()
 
-        # Dịch mã lỗi
         for v_type in ViolationType:
             if ViolationRegistry.get_code(v_type) == raw_error_code:
                 ui_error_name = ViolationRegistry.get_name(v_type)
                 break
 
-        # Dịch mã xe
-        raw_vehicle_type = record_data.get('loai_phuong_tien', '') # Đổi từ vehicle_type
+        raw_vehicle_type = record_data.get('loai_phuong_tien', '')
         ui_vehicle_name = raw_vehicle_type
         try:
             enum_vehicle = TrafficVehicleType[raw_vehicle_type]
@@ -213,22 +283,24 @@ class EvidenceViewer(QWidget):
         except KeyError:
             pass
 
-        # Dịch thời gian
-        raw_time = record_data.get('thoi_gian_vi_pham', '') # Đổi từ timestamp
-        time_str = raw_time.strftime("%d/%m/%Y %H:%M:%S") if isinstance(raw_time, datetime) else str(raw_time)
-
-        # Cập nhật Label hiển thị HTML
-        info_text = (
-            f"<b>Biển số:</b> <span style='color:#f39c12; font-size: 16px;'>{record_data.get('bien_so_xe')}</span><br>"
-            f"<b>Lỗi vi phạm:</b> {ui_error_name}<br>"
-            f"<b>Đối tượng:</b> {ui_vehicle_name}<br>"
-            f"<b>Thời gian:</b> {time_str}<br>" 
-            f"<b>Camera:</b> {record_data.get('ten_camera')}"
-        )
-        self.lbl_details.setText(info_text)
+        raw_time = record_data.get('thoi_gian_vi_pham', '')
+        time_str = raw_time.strftime("%d/%m/%Y - %H:%M:%S") if isinstance(raw_time, datetime) else str(raw_time)
 
         # ======================================================
-        # 2. XỬ LÝ LOAD ẢNH VÀ VIDEO TỪ Ổ CỨNG
+        # [CẬP NHẬT 2]: Bơm dữ liệu vào Bảng Grid
+        # ======================================================
+        self.info_table_widget.setVisible(True)
+        self.val_labels["camera"].setText(record_data.get('ten_camera', 'N/A'))
+        self.val_labels["time"].setText(time_str)
+        self.val_labels["warning"].setText(ui_error_name)
+        self.val_labels["vehicle"].setText(ui_vehicle_name)
+        
+        lane_str = record_data.get('lan_duong', '')
+        self.val_labels["lane"].setText(lane_str if lane_str else "Ngoài làn")
+        self.val_labels["plate"].setText(record_data.get('bien_so_xe', 'Chưa rõ'))
+
+        # ======================================================
+        # XỬ LÝ LOAD ẢNH VÀ VIDEO TỪ Ổ CỨNG
         # ======================================================
         self.image_files.clear()
         self._stop_video()
@@ -238,7 +310,7 @@ class EvidenceViewer(QWidget):
 
         if self.current_folder and os.path.exists(self.current_folder):
             for file in sorted(os.listdir(self.current_folder)):
-                ext = file.lower()
+                ext = file.lower()          
                 filepath = os.path.join(self.current_folder, file)
                 
                 if ext.endswith(('.jpg', '.png', '.jpeg')):
@@ -259,7 +331,6 @@ class EvidenceViewer(QWidget):
         else:
             self.lbl_image_display.setText("Thư mục bằng chứng không tồn tại hoặc đã bị xóa.")
 
-        # Ép UI nhảy về Tab Hình ảnh
         self.btn_tab_img.setChecked(True)
         self.stacked_widget.setCurrentIndex(0)
 
@@ -334,3 +405,20 @@ class EvidenceViewer(QWidget):
         super().resizeEvent(event)
         if self.image_files and self.stacked_widget.currentIndex() == 0:
             self._show_current_image()
+
+    def _colorize_icon(self, pixmap: QPixmap, color_hex: str) -> QPixmap:
+        """Hàm hỗ trợ đổi màu (phủ màu) cho Icon có nền trong suốt"""
+        colored_pixmap = QPixmap(pixmap.size())
+        colored_pixmap.fill(Qt.GlobalColor.transparent) # Giữ nền trong suốt
+        
+        painter = QPainter(colored_pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.drawPixmap(0, 0, pixmap)
+        
+        # Lấy lớp Alpha (độ trong suốt) của ảnh gốc làm mặt nạ
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(colored_pixmap.rect(), QColor(color_hex))
+        painter.end()
+        
+        return colored_pixmap
+# --- END OF FILE gui/features/violation_reviewer/components/evidence_viewer.py ---
