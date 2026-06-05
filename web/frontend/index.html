@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traffic AI — Dashboard</title>
+  <meta name="description" content="Hệ thống quản lý vi phạm giao thông AI — Dashboard Admin & Kiểm duyệt viên" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════ LOGIN SCREEN ═══════════════════ -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <h1 class="login-title">Traffic AI Dashboard</h1>
+      <p class="login-subtitle">Hệ thống Quản lý Vi phạm Giao thông</p>
+    </div>
+    <form id="login-form" class="login-form" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label">Tên đăng nhập</label>
+        <input id="login-username" type="text" class="form-input" placeholder="Nhập tên đăng nhập" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mật khẩu</label>
+        <input id="login-password" type="password" class="form-input" placeholder="Nhập mật khẩu" autocomplete="current-password" />
+      </div>
+      <p id="login-error" class="login-error hidden"></p>
+      <button id="login-btn" type="submit" class="btn-primary btn-full">
+        <span id="login-btn-text">Đăng nhập</span>
+        <span id="login-spinner" class="spinner hidden"></span>
+      </button>
+    </form>
+    <p class="login-hint">
+      Admin: <code>admin / admin123</code><br/>
+      Reviewer: <code>reviewer / review123</code>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════ APP SHELL ════════════════════== -->
+<div id="app" class="app hidden">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo"><div class="logo-square"></div></div>
+      <div class="sidebar-brand">
+        <span class="brand-name">Traffic AI</span>
+        <span class="brand-sub">Admin</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <!-- nav items filled by JS based on role -->
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info" id="user-info-card">
+        <div class="user-avatar" id="user-avatar">A</div>
+        <div class="user-details">
+          <span class="user-name" id="user-name">—</span>
+          <span class="user-role-badge" id="user-role-badge">—</span>
+        </div>
+      </div>
+      <button id="logout-btn" class="btn-logout" title="Đăng xuất">X</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="sidebar-toggle" class="topbar-icon-btn" title="Thu/Mở sidebar">=</button>
+        <h2 class="page-title" id="page-title">Dashboard</h2>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-time" id="topbar-time"></div>
+        <div class="status-indicator">
+          <div class="status-dot-sm"></div>
+          <span>MongoDB</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="content-area" id="content-area">
+      <!-- Pages rendered by JS -->
+    </div>
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

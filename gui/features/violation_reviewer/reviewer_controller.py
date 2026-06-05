@@ -85,13 +85,12 @@ class ReviewerController(QObject):
         # Cập nhật UI
         self.view.data_table.load_data(data_list, self.current_page, total_pages)
 
-    @pyqtSlot(int, int)
-    def handle_approval_decision(self, record_id: int, new_status: int) -> None:
+    @pyqtSlot(str, int)
+    def handle_approval_decision(self, record_id: str, new_status: int) -> None:
         """Xử lý Duyệt (1) hoặc Từ chối (-1) biên bản vi phạm"""
         if not record_id: 
             return
         
-        # [VÁ LỖI]: Gọi đúng Repository
         success = self.db.violations.update_status(record_id, new_status)
         
         if success:
@@ -99,7 +98,6 @@ class ReviewerController(QObject):
             self._fetch_and_update_table()
             
             # 2. Xóa trạng thái của Viewer để tránh bấm nhầm 2 lần
-            # Ghi chú: Cách tốt nhất là thiết kế 1 hàm clear_view() trong evidence_viewer
             self.view.evidence_viewer.lbl_details.setText("Xử lý thành công! Vui lòng chọn bản ghi tiếp theo.")
             self.view.evidence_viewer.btn_approve.hide()
             self.view.evidence_viewer.btn_reject.hide()
@@ -109,16 +107,16 @@ class ReviewerController(QObject):
         else:
             QMessageBox.warning(self.view, "Lỗi", "Không thể cập nhật trạng thái vào Cơ sở dữ liệu.")
 
-    @pyqtSlot(int)
-    def handle_print_ticket(self, record_id: int) -> None:
+    @pyqtSlot(str)
+    def handle_print_ticket(self, record_id: str) -> None:
         """Chức năng in biên bản (Sẽ phát triển sau)"""
         if not record_id: 
             return
-        QMessageBox.information(    
+        # Logic In Biên Bản sẽ làm sau (Có thể gọi thư viện docx-template để sinh file Word)
+        QMessageBox.information(
             self.view, "Thành công", 
             f"Đang xuất file Biên Bản Phạt Nguội cho ID {record_id}...\n(Tính năng in PDF đang cập nhật)"
         )
-    
 
     def _load_camera_filter(self) -> None:
         """Lấy danh mục Camera từ CSDL và đẩy xuống View (FilterPanel)"""

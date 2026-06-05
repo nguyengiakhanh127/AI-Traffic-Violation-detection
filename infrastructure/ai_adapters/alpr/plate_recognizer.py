@@ -63,7 +63,6 @@ class LicensePlateRecognizer:
             best_box = max(boxes, key=lambda b: float(b.conf[0]))
             
             x1, y1, x2, y2 = map(int, best_box.xyxy[0].tolist())
-            conf = float(best_box.conf[0])
             
             h, w = vehicle_crop.shape[:2]
             x1, y1 = max(0, x1), max(0, y1)
@@ -88,17 +87,13 @@ class LicensePlateRecognizer:
             else:
                 raw_text = str(ocr_result) if ocr_result else ""
             
-            # [CẬP NHẬT TRỌNG TÂM]: Làm sạch chuỗi bằng Regex
+            # Làm sạch chuỗi bằng Regex
             # Lọc bỏ mọi ký tự không phải là Chữ cái (a-z, A-Z) và Số (0-9)
             clean_text = re.sub(r'[^A-Za-z0-9]', '', raw_text).upper()
             
-            # Đảm bảo biển số thu được không bị rỗng sau khi làm sạch
-            if len(clean_text) < 3: # Biển số thực tế thường dài hơn 3 ký tự
+            if len(clean_text) < 3:
                 plate_text = "Không xác định"
             else:
-                # [Tùy chọn]: Nếu bạn muốn thêm lại dấu gạch nối giữa cụm chữ và số cho dễ nhìn
-                # Ví dụ: 29A12345 -> 29A-12345, bạn có thể viết thêm logic regex ở đây.
-                # Hiện tại, hệ thống sẽ lưu chuỗi sạch nguyên khối (VD: 29A12345).
                 plate_text = clean_text
             
             # ==========================================

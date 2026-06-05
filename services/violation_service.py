@@ -132,7 +132,13 @@ class ViolationService:
                     bien_so="", 
                     duong_dan=event_folder
                 )
-            
+                if insert_id:
+                    logger.info(f"✅ Đã lưu DB (ID: {insert_id}).")
+                else:
+                    logger.error("❌ Lưu Database thất bại!")
+            else:
+                logger.warning("⚠️ Bỏ qua lưu DB vì chưa cấu hình Camera ID.")
+
             file_timestamp = current_time.strftime("%Hh%Mm%Ss_%f")[:-3]
 
             # 2. Kích hoạt xuất Video (Ném vào Queue)

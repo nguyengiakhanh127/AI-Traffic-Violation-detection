@@ -37,8 +37,7 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        # Khởi tạo Database Facade (Sử dụng Connection Pool)
-        self.db_service = DatabaseService(port=3306)
+        self.db_service = DatabaseService()
 
         self._setup_ui()
         self._load_stylesheet()

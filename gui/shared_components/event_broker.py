@@ -13,7 +13,6 @@ class EventBroker(QObject):
     request_draw_bbox = pyqtSignal(object)      
     request_draw_line = pyqtSignal(object, str) 
 
-
     # 2. Các tín hiệu Đồ họa & UI
     request_highlight_polygon = pyqtSignal(str)
     clear_highlight_polygon = pyqtSignal()
@@ -26,7 +25,7 @@ class EventBroker(QObject):
     request_delete_entity = pyqtSignal(str)
 
     request_toggle_rois_visibility = pyqtSignal(bool)
-    
+
     # 3. Các tín hiệu dữ liệu Cấu hình
     # rule_updated(đối tượng rule, lane_id, rule_type, allowed_vehicles)
     rule_updated = pyqtSignal(object, str, str, set) 
@@ -37,8 +36,8 @@ class EventBroker(QObject):
     request_search_violations = pyqtSignal(dict) # Từ điển bộ lọc
     violation_row_selected = pyqtSignal(dict)    # Từ điển dữ liệu hàng
 
-    submit_approval_decision = pyqtSignal(int, int) # Record_ID, Quyết định
-    request_print_ticket = pyqtSignal(int)          # Record_ID
+    submit_approval_decision = pyqtSignal(str, int) # Record_ID (str/MongoDB ObjectId), Quyết định
+    request_print_ticket = pyqtSignal(str)          # Record_ID (str/MongoDB ObjectId)
     toggle_db_logging = pyqtSignal(bool)            # Bật/Tắt Ghi DB
     
 app_broker = EventBroker()
