@@ -6,26 +6,27 @@ let userName = localStorage.getItem('fullname') || '';
 let currentPage = 1;
 const PAGE_SIZE = 20;
 let chartDay = null, chartType = null, chartVehicle = null;
+let currentReviewMode = false;
 
 /* ─── Nav config by role (no icons) ─────────── */
 const NAV = {
   admin: [
-    { id: 'dashboard',  label: 'Dashboard',        marker: '01' },
-    { id: 'cameras',    label: 'Quan ly Camera',    marker: '02' },
-    { id: 'violations', label: 'Tat ca Vi pham',    marker: '03' },
-    { id: 'review',     label: 'Kiem duyet',        marker: '04' },
+    { id: 'dashboard', label: 'Dashboard', marker: '01' },
+    { id: 'cameras', label: 'Quan ly Camera', marker: '02' },
+    { id: 'violations', label: 'Tat ca Vi pham', marker: '03' },
+    { id: 'review', label: 'Kiem duyet', marker: '04' },
   ],
   reviewer: [
-    { id: 'review',     label: 'Kiem duyet',        marker: '01' },
-    { id: 'violations', label: 'Vi pham',           marker: '02' },
+    { id: 'review', label: 'Kiem duyet', marker: '01' },
+    { id: 'violations', label: 'Vi pham', marker: '02' },
   ],
 };
 
 const PAGE_TITLES = {
-  dashboard:  'Dashboard',
-  cameras:    'Quan ly Camera',
+  dashboard: 'Dashboard',
+  cameras: 'Quan ly Camera',
   violations: 'Danh sach Vi pham',
-  review:     'Kiem duyet Vi pham',
+  review: 'Kiem duyet Vi pham',
 };
 
 /* ─── Utils ─────────────────────────────────── */
@@ -57,24 +58,24 @@ function fmtDate(s) {
   if (!s) return '—';
   const d = new Date(s);
   if (isNaN(d)) return s;
-  return d.toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function statusBadge(s) {
-  if (s === 1)  return '<span class="badge approved">Da duyet</span>';
+  if (s === 1) return '<span class="badge approved">Da duyet</span>';
   if (s === -1) return '<span class="badge rejected">Tu choi</span>';
   return '<span class="badge pending">Cho duyet</span>';
 }
 
 function violationLabel(code) {
   const map = {
-    DI_SAI_LAN:      'Di sai lan',
-    DI_NGUOC_CHIEU:  'Di nguoc chieu',
-    DE_VACH_PHAN_LAN:'De vach phan lan',
-    VUOT_DEN_DO:     'Vuot den do',
-    WRONG_LANE:      'Sai lan',
-    WRONG_WAY:       'Nguoc chieu',
-    LINE_CROSSING:   'Vuot vach',
+    DI_SAI_LAN: 'Di sai lan',
+    DI_NGUOC_CHIEU: 'Di nguoc chieu',
+    DE_VACH_PHAN_LAN: 'De vach phan lan',
+    VUOT_DEN_DO: 'Vuot den do',
+    WRONG_LANE: 'Sai lan',
+    WRONG_WAY: 'Nguoc chieu',
+    LINE_CROSSING: 'Vuot vach',
   };
   return map[code] || code;
 }
@@ -186,11 +187,11 @@ function navigate(pageId) {
   area.innerHTML = '';
   currentPage = 1;
   ({
-    dashboard:  renderDashboard,
-    cameras:    renderCameras,
+    dashboard: renderDashboard,
+    cameras: renderCameras,
     violations: () => renderViolationsPage(false),
-    review:     () => renderViolationsPage(true),
-  }[pageId] || (() => {}))();
+    review: () => renderViolationsPage(true),
+  }[pageId] || (() => { }))();
 }
 
 /* ══════════════════ DASHBOARD PAGE ════════════════════ */
@@ -198,7 +199,7 @@ async function renderDashboard() {
   const area = $('content-area');
   area.innerHTML = `
     <div class="stats-grid" id="stats-grid">
-      ${[1,2,3,4].map(() => `<div class="stat-card"><div class="skeleton" style="width:100%;height:70px;"></div></div>`).join('')}
+      ${[1, 2, 3, 4].map(() => `<div class="stat-card"><div class="skeleton" style="width:100%;height:70px;"></div></div>`).join('')}
     </div>
     <div class="charts-grid">
       <div class="chart-card full">
@@ -250,7 +251,7 @@ async function renderDashboard() {
 
     /* Chart defaults — classic muted style */
     Chart.defaults.color = '#555e7a';
-    Chart.defaults.font  = { family: 'Inter', size: 11 };
+    Chart.defaults.font = { family: 'Inter', size: 11 };
 
     if (chartDay) chartDay.destroy();
     chartDay = new Chart($('chart-day'), {
@@ -277,7 +278,7 @@ async function renderDashboard() {
       }
     });
 
-    const PIE_COLORS = ['#4a7cf7','#d4a017','#3dba6f','#d94f4f','#7aa3ff','#8b92aa','#555e7a','#2c3148'];
+    const PIE_COLORS = ['#4a7cf7', '#d4a017', '#3dba6f', '#d94f4f', '#7aa3ff', '#8b92aa', '#555e7a', '#2c3148'];
 
     if (chartType) chartType.destroy();
     chartType = new Chart($('chart-type'), {
@@ -352,7 +353,7 @@ async function renderCameras() {
       <h2 class="section-title">Danh sach Camera</h2>
     </div>
     <div class="camera-grid" id="camera-grid">
-      ${[1,2,3].map(() => `<div class="camera-card"><div class="skeleton" style="height:100px;width:100%"></div></div>`).join('')}
+      ${[1, 2, 3].map(() => `<div class="camera-card"><div class="skeleton" style="height:100px;width:100%"></div></div>`).join('')}
     </div>`;
 
   if (isAdmin) $('add-cam-btn').addEventListener('click', addCamera);
@@ -402,6 +403,7 @@ async function addCamera() {
 
 /* ══════════════════ VIOLATIONS PAGE ══════════════════ */
 async function renderViolationsPage(reviewMode = false) {
+  currentReviewMode = reviewMode;
   const area = $('content-area');
   area.innerHTML = `
     <div class="table-card">
@@ -439,7 +441,7 @@ async function renderViolationsPage(reviewMode = false) {
               <th>Phuong tien</th>
               <th>Bien so</th>
               <th>Trang thai</th>
-              ${reviewMode ? '<th>Thao tac</th>' : ''}
+              <th>Thao tac</th>
               <th>Bang chung</th>
             </tr>
           </thead>
@@ -472,16 +474,16 @@ async function loadViolations(reviewMode) {
     offset: (currentPage - 1) * PAGE_SIZE,
   });
   const bienso = $('f-bienso')?.value.trim();
-  const maloi   = $('f-maloi')?.value;
-  const loaixe  = $('f-loaixe')?.value;
-  const ts      = $('f-trangthai')?.value;
+  const maloi = $('f-maloi')?.value;
+  const loaixe = $('f-loaixe')?.value;
+  const ts = $('f-trangthai')?.value;
   if (bienso) params.set('bien_so', bienso);
-  if (maloi)  params.set('ma_loi', maloi);
+  if (maloi) params.set('ma_loi', maloi);
   if (loaixe) params.set('loai_xe', loaixe);
   if (ts !== '') params.set('trang_thai', ts);
 
   const tbody = $('v-tbody');
-  const cols = reviewMode ? 8 : 7;
+  const cols = 8;
   tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:32px"><div class="spinner" style="margin:auto"></div></td></tr>`;
 
   try {
@@ -506,17 +508,21 @@ async function loadViolations(reviewMode) {
     tbody.innerHTML = data.map(row => {
       const evidence = row.duong_dan_bang_chung;
       const evidenceCell = evidence
-        ? `<a href="/evidence/${encodeURIComponent(evidence.replace(/\\/g, '/').split('/Evidence/').pop())}" target="_blank" class="btn-sm">Xem</a>`
+        ? `<button onclick="showEvidence('${row.id}')" class="btn-sm evidence-btn">Xem</button>`
         : `<span class="text-muted">—</span>`;
 
-      const actions = reviewMode && row.trang_thai_duyet === 0
-        ? `<td>
-            <div class="flex gap-2">
-              <button class="btn-sm approve" onclick="changeStatus('${row.id}', 1)">Duyet</button>
-              <button class="btn-sm reject"  onclick="changeStatus('${row.id}', -1)">Tu choi</button>
-            </div>
-          </td>`
-        : reviewMode ? `<td class="muted">—</td>` : '';
+      const approveRejectBtns = row.trang_thai_duyet === 0
+        ? `<button class="btn-sm approve" onclick="changeStatus('${row.id}', 1)">Duyet</button>
+           <button class="btn-sm reject"  onclick="changeStatus('${row.id}', -1)">Tu choi</button>`
+        : '';
+      const deleteBtn = `<button class="btn-sm reject" onclick="deleteViolation('${row.id}')">Xoa</button>`;
+
+      const actions = `<td>
+        <div class="flex gap-2">
+          ${approveRejectBtns}
+          ${deleteBtn}
+        </div>
+      </td>`;
 
       return `<tr>
         <td class="muted font-mono">${fmtDate(row.thoi_gian_vi_pham)}</td>
@@ -542,11 +548,112 @@ async function changeStatus(id, status) {
       body: JSON.stringify({ trang_thai: status })
     });
     toast(status === 1 ? 'Da duyet vi pham' : 'Da tu choi vi pham', 'success');
-    loadViolations(true);
+    loadViolations(currentReviewMode);
   } catch (err) {
     toast('Loi cap nhat: ' + err.message, 'error');
   }
 }
+
+async function deleteViolation(id) {
+  if (!confirm('Ban co chac chan muon xoa ban ghi vi pham nay?')) return;
+  try {
+    const res = await api(`/api/violations/${id}`, {
+      method: 'DELETE'
+    });
+    if (res && res.success) {
+      toast('Da xoa ban ghi vi pham thanh cong', 'success');
+      loadViolations(currentReviewMode);
+    } else {
+      toast('Xoa that bai: khong tim thay ban ghi', 'error');
+    }
+  } catch (err) {
+    toast('Loi xoa: ' + err.message, 'error');
+    console.error('[deleteViolation] ID:', id, 'Error:', err);
+  }
+}
+
+/* ── Expose inline-onclick handlers to global scope ── */
+window.changeStatus = changeStatus;
+window.deleteViolation = deleteViolation;
+
+async function showEvidence(recordId) {
+  const modal = $('evidence-modal');
+  const body = $('modal-body');
+
+  modal.classList.remove('hidden');
+  body.innerHTML = '<div class="spinner" style="margin:40px auto"></div>';
+
+  try {
+    const res = await api(`/api/violations/${recordId}/evidence`);
+    if (!res || !res.files || res.files.length === 0) {
+      body.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">[ TRỐNG ]</div>
+          <p class="empty-text">Không tìm thấy hình ảnh vi phạm.</p>
+        </div>`;
+      return;
+    }
+
+    const images = res.files.filter(f => f.type === 'image');
+    const others = res.files.filter(f => f.type !== 'image' && f.type !== 'video');
+
+    if (images.length === 0 && others.length === 0) {
+      body.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">[ TRỐNG ]</div>
+          <p class="empty-text">Không tìm thấy hình ảnh vi phạm.</p>
+        </div>`;
+      return;
+    }
+
+    let html = '<div class="evidence-gallery">';
+
+    if (images.length > 0) {
+      html += '<div class="evidence-section"><h4>Hình ảnh bằng chứng</h4><div class="image-grid">';
+      images.forEach(img => {
+        html += `
+          <div class="evidence-item image-item">
+            <a href="${img.url}" target="_blank" title="Click để phóng to">
+              <img src="${img.url}" alt="${img.name}" class="evidence-media" />
+            </a>
+            <div class="evidence-name">${img.name}</div>
+          </div>`;
+      });
+      html += '</div></div>';
+    }
+
+    if (others.length > 0) {
+      html += '<div class="evidence-section"><h4>Tệp tin khác</h4>';
+      others.forEach(oth => {
+        html += `
+          <div class="evidence-item other-item">
+            <a href="${oth.url}" target="_blank" class="btn-primary" style="display:inline-block; margin-top:5px;">
+              Tải xuống: ${oth.name}
+            </a>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">[ LỖI ]</div>
+        <p class="empty-text" style="color:var(--red)">Lỗi khi tải bằng chứng: ${err.message}</p>
+      </div>`;
+  }
+}
+
+function closeEvidenceModal(e) {
+  if (e && e.target.id === 'evidence-modal') {
+    $('evidence-modal').classList.add('hidden');
+  }
+}
+
+window.showEvidence = showEvidence;
+window.closeEvidenceModal = closeEvidenceModal;
 
 /* ─── Sidebar Toggle ─────────────────────────── */
 $('sidebar-toggle').addEventListener('click', () => {

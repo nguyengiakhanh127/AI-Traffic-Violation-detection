@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Traffic AI — Dashboard</title>
   <meta name="description" content="Hệ thống quản lý vi phạm giao thông AI — Dashboard Admin & Kiểm duyệt viên" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -92,6 +95,27 @@
   </main>
 </div>
 
-<script src="/static/app.js"></script>
+
+<!-- ═══════════════════ EVIDENCE MODAL ═══════════════════ -->
+<div id="evidence-modal" class="modal-overlay hidden" onclick="closeEvidenceModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Bằng chứng vi phạm</h3>
+      <button class="modal-close" onclick="document.getElementById('evidence-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="spinner" style="margin:40px auto"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Cache-busting: inject version timestamp so browser always fetches latest app.js
+  (function() {
+    var s = document.createElement('script');
+    s.src = '/static/app.js?v=' + Date.now();
+    document.body.appendChild(s);
+  })();
+</script>
 </body>
 </html>

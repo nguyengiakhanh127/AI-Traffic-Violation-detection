@@ -1,0 +1,11 @@
+{
+    "camera_name": "Camera Nguyễn Xí",
+    "vehicle_id": 92,
+    "vehicle_type": "BUS",
+    "license_plate": "UNKNOWN",
+    "violation_time": "06/06/2026 14:44:51",
+    "violation_error": {
+        "code": "DE_VACH_PHAN_LAN",
+        "description": "Không chấp hành hiệu lệnh, chỉ dẫn của vạch kẻ đường"
+    }
+}

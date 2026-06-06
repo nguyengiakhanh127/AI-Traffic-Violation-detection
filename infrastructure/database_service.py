@@ -193,6 +193,15 @@ class ViolationRepository:
             logger.error(f"❌ Lỗi update_license_plate: {e}")
             return False
 
+    def delete(self, record_id: str) -> bool:
+        col = self.get_collection()
+        try:
+            result = col.delete_one({"_id": ObjectId(record_id)})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f"❌ Lỗi delete violation: {e}")
+            return False
+
     def _build_query(self, filters: dict) -> dict:
         """Xây dựng MongoDB query từ dict filter (tương đương WHERE clause SQL)."""
         query = {}
@@ -260,3 +269,6 @@ class DatabaseService:
 
     def update_violation_status(self, record_id: str, new_status: int) -> bool:
         return self.violations.update_status(record_id, new_status)
+
+    def delete_violation(self, record_id: str) -> bool:
+        return self.violations.delete(record_id)

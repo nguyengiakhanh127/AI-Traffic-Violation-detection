@@ -86,19 +86,65 @@ class VideoRingBuffer:
 
     def _write_video_task(self, jpeg_bytes_list, filepath: str, fps: int, size: tuple) -> None:
         out = None
+        temp_path = None
         try:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
+            # Sử dụng H264 qua MSMF trên Windows để trình duyệt web xem được trực tiếp.
+            # Vì OpenCV MSMF không ghi được file nếu đường dẫn chứa kí tự unicode tiếng Việt,
+            # chúng ta ghi vào file tạm ở thư mục Temp hệ thống (đường dẫn ASCII) rồi dùng shutil.move để di chuyển về đích.
+            import platform
+            import shutil
+            import tempfile
             
-            out = cv2.VideoWriter(filepath, fourcc, float(fps), size)
+            if platform.system() == "Windows":
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*'H264')
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=".mp4")
+                    os.close(temp_fd)
+                    
+                    out = cv2.VideoWriter(temp_path, cv2.CAP_MSMF, fourcc, float(fps), size)
+                    if not out.isOpened():
+                        logger.warning("Không mở được VideoWriter với H264 + MSMF, thử chuyển sang mp4v trực tiếp...")
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        temp_path = None
+                        
+                        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                        out = cv2.VideoWriter(filepath, fourcc, float(fps), size)
+                except Exception as ex:
+                    logger.warning(f"Lỗi khởi tạo MSMF H264: {ex}. Chuyển sang mp4v trực tiếp...")
+                    if temp_path and os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    temp_path = None
+                    
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter(filepath, fourcc, float(fps), size)
+            else:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(filepath, fourcc, float(fps), size)
             
             if not out.isOpened():
-                raise RuntimeError(f"Không mở được luồng VideoWriter: {filepath}")
+                raise RuntimeError(f"Không mở được luồng VideoWriter.")
 
             for jpeg_bytes in jpeg_bytes_list:
                 np_arr = np.frombuffer(jpeg_bytes, np.uint8)
                 frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
                 if frame is not None:
                     out.write(frame)
+            
+            out.release()
+            out = None
+            
+            if temp_path and os.path.exists(temp_path):
+                if os.path.exists(filepath):
+                    try: os.remove(filepath)
+                    except: pass
+                
+                target_dir = os.path.dirname(filepath)
+                if target_dir and not os.path.exists(target_dir):
+                    os.makedirs(target_dir, exist_ok=True)
+                    
+                shutil.move(temp_path, filepath)
+                temp_path = None
                     
         except Exception as e:
             logger.error(f"❌ Lỗi ghi video {filepath}: {e}")
@@ -108,7 +154,10 @@ class VideoRingBuffer:
         finally:
             if out is not None:
                 out.release()
-                logger.info(f"✅ Đã đóng và lưu tệp video an toàn: {filepath}")
+            if temp_path and os.path.exists(temp_path):
+                try: os.remove(temp_path)
+                except: pass
+            logger.info(f"✅ Đã đóng và lưu tệp video an toàn: {filepath}")
 
     def update_fps(self, new_fps: float) -> None:
         with self._lock:

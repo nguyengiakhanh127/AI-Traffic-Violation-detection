@@ -1,0 +1,11 @@
+{
+    "camera_name": "Camera Nguyễn Xí",
+    "vehicle_id": 2,
+    "vehicle_type": "CAR",
+    "license_plate": "UNKNOWN",
+    "violation_time": "06/06/2026 14:44:04",
+    "violation_error": {
+        "code": "DI_NGUOC_CHIEU",
+        "description": "Đi ngược chiều của đường một chiều hoặc đường có biển cấm"
+    }
+}

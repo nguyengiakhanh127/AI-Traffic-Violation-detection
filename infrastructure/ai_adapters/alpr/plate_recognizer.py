@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import logging
 from typing import Tuple, Optional
-from fast_plate_ocr import ONNXPlateRecognizer
 import re
 
 try:
@@ -12,6 +11,13 @@ try:
     HAS_YOLO = True
 except ImportError:
     HAS_YOLO = False
+
+try:
+    from fast_plate_ocr import ONNXPlateRecognizer
+    HAS_FAST_PLATE_OCR = True
+except ImportError:
+    HAS_FAST_PLATE_OCR = False
+
 
 logger = logging.getLogger("ALPRService")
 
@@ -30,6 +36,9 @@ class LicensePlateRecognizer:
 
     def _initialize_models(self) -> None:
         """Nạp các mô hình vào bộ nhớ RAM/GPU (Chỉ gọi 1 lần khi khởi động)"""
+        if not HAS_FAST_PLATE_OCR:
+            logger.warning("⚠️ Chưa cài đặt 'fast_plate_ocr'. Tính năng đọc biển số bị vô hiệu hóa. Cài bằng: pip install fast-plate-ocr")
+            return
         try:
             if HAS_YOLO:
                 logger.info(f"Đang nạp mô hình phát hiện biển số (YOLO) từ: {self.yolo_model_path}")

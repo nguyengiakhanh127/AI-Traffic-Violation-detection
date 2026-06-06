@@ -4,9 +4,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -47,7 +48,17 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/", include_in_schema=False)
 async def serve_index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"),
+                        headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+# ── Serve app.js with no-cache header ─────────────────────
+@app.get("/static/app.js", include_in_schema=False)
+async def serve_appjs():
+    return FileResponse(
+        os.path.join(FRONTEND_DIR, "app.js"),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        media_type="application/javascript"
+    )
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_spa(full_path: str):
